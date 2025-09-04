@@ -50,4 +50,4 @@ Pull requests welcome. Please follow standard GitHub flow:
 3. Open a PR
 
 ## License
-MIT
+GPL v3
