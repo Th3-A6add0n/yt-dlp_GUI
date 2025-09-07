@@ -110,23 +110,23 @@ The easiest way to build the application is using the automated build script:
 
 1. Clone the repository:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  git clone https://github.com/yourusername/yt-dlp-gui.git
+git clone https://github.com/yourusername/yt-dlp-gui.git
 
-&nbsp;  cd yt-dlp-gui
+cd yt-dlp-gui
 
-&nbsp;  ```
+```
 
 
 
 2. Run the build script:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  python build.py
+python build.py
 
-&nbsp;  ```
+```
 
 
 
@@ -158,43 +158,43 @@ If you prefer to build manually:
 
 1. Clone the repository:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  git clone https://github.com/yourusername/yt-dlp-gui.git
+git clone https://github.com/yourusername/yt-dlp-gui.git
 
-&nbsp;  cd yt-dlp-gui
+cd yt-dlp-gui
 
-&nbsp;  ```
+```
 
 
 
 2. Install Python dependencies:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  pip install -r requirements.txt
+pip install -r requirements.txt
 
-&nbsp;  ```
+```
 
 
 
 3. Download the required binaries:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  python yt_dlp_gui/fetch_binaries.py
+python yt_dlp_gui/fetch_binaries.py
 
-&nbsp;  ```
+```
 
 
 
 4. Build the application:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  pyinstaller yt_dlp_gui.spec
+pyinstaller yt_dlp_gui.spec
 
-&nbsp;  ```
+```
 
 
 
@@ -288,45 +288,45 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 1. Clone the repository:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  git clone https://github.com/yourusername/yt-dlp-gui.git
+git clone https://github.com/yourusername/yt-dlp-gui.git
 
-&nbsp;  cd yt-dlp-gui
+cd yt-dlp-gui
 
-&nbsp;  ```
+```
 
 
 
 2. Create a virtual environment:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  python -m venv venv
+python -m venv venv
 
-&nbsp;  source venv/bin/activate  # On Windows: venvScriptsactivate
+source venv/bin/activate  # On Windows: venvScriptsactivate
 
-&nbsp;  ```
+```
 
 
 
 3. Install dependencies:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  pip install -r requirements.txt
+pip install -r requirements.txt
 
-&nbsp;  ```
+```
 
 
 
 4. Run the application in development mode:
 
-&nbsp;  ```bash
+```bash
 
-&nbsp;  python yt_dlp_gui/main.py
+python yt_dlp_gui/main.py
 
-&nbsp;  ```
+```
 
 
 
