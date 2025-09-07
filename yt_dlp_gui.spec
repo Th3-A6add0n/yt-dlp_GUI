@@ -74,7 +74,7 @@ a = Analysis(
         (os.path.join(assets_dir, ffmpeg_name), os.path.join('assets', platform_folder)),
         (os.path.join(assets_dir, ffprobe_name), os.path.join('assets', platform_folder)),
     ],
-    hiddenimports=[],
+    hiddenimports=['sip', 'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -134,7 +134,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=True,  # Changed to True for debugging
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

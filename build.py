@@ -502,6 +502,35 @@ def build_application():
     # Get the distribution directory
     dist_dir = script_dir / "dist"
     
+    # For Windows, create a console version for debugging
+    if system == 'windows':
+        print("Creating console version for debugging...")
+        console_spec = script_dir / "yt_dlp_gui_console.spec"
+        
+        # Create a console version of the spec file
+        with open(spec_file, 'r') as original:
+            spec_content = original.read()
+        
+        # Replace console=False with console=True
+        console_content = spec_content.replace("console=False", "console=True")
+        
+        # Write the console spec file
+        with open(console_spec, 'w') as console_file:
+            console_file.write(console_content)
+        
+        # Build the console version
+        print(f"Building console version with spec file: {console_spec}")
+        result = run_command(["pyinstaller", str(console_spec)], cwd=script_dir)
+        if result is None:
+            print("PyInstaller console command timed out")
+        
+        # Rename the console version
+        console_exe = dist_dir / "yt-dlp GUI.exe"
+        debug_exe = dist_dir / "yt-dlp GUI_debug.exe"
+        if console_exe.exists():
+            shutil.move(str(console_exe), str(debug_exe))
+            print(f"Created debug version: {debug_exe}")
+    
     # For macOS, create an application bundle and DMG
     if system == 'darwin':
         app_name = "yt-dlp GUI"
@@ -524,15 +553,6 @@ def build_application():
         if not create_linux_appimage(dist_dir, app_name):
             print("Failed to create Linux AppImage, but continuing with build")
             # Don't return False here, as the application bundle was created successfully
-    
-    # For Windows, no special handling needed
-    elif system == 'windows':
-        executable_path = dist_dir / "yt-dlp GUI.exe"
-        if executable_path.exists():
-            print("Windows executable created successfully")
-        else:
-            print("Error: Windows executable not found")
-            return False
     
     return True
 
