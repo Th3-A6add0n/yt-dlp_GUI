@@ -40,6 +40,7 @@ elif system == 'darwin':  # macOS
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
         # For arm64 macOS, use the static builds from evermeet.cx
+        # These are 7-zip archives that need to be extracted
         FFMPEG_URL = "https://evermeet.cx/ffmpeg/getrelease/ffmpeg"
         FFPROBE_URL = "https://evermeet.cx/ffmpeg/getrelease/ffprobe"
     else:  # x86_64
@@ -295,42 +296,82 @@ def download_ffmpeg():
         architecture = platform.machine().lower()
         
         if architecture == 'arm64':
-            # For arm64 macOS, download the individual binaries directly
-            if not download_file(FFMPEG_URL, ffmpeg_path):
-                return False
-            
-            if FFPROBE_URL and not download_file(FFPROBE_URL, ffprobe_path):
-                return False
-            
-            # Set executable permissions
-            ffmpeg_path.chmod(0o755)
-            if FFPROBE_URL:
-                ffprobe_path.chmod(0o755)
-            
-            # Verify the binaries are macOS ARM64 compatible
-            try:
-                ffmpeg_check = subprocess.run(['file', str(ffmpeg_path)], 
-                                             capture_output=True, text=True, check=True)
-                if 'Mach-O 64-bit executable arm64' not in ffmpeg_check.stdout:
-                    print(f"Warning: Downloaded ffmpeg binary is not macOS ARM64 compatible: {ffmpeg_check.stdout}")
+            # For arm64 macOS, download and extract the 7-zip archives
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Download ffmpeg
+                ffmpeg_archive_path = temp_path / "ffmpeg.7z"
+                if not download_file(FFMPEG_URL, ffmpeg_archive_path):
                     return False
+                
+                # Download ffprobe
+                ffprobe_archive_path = temp_path / "ffprobe.7z"
+                if not download_file(FFPROBE_URL, ffprobe_archive_path):
+                    return False
+                
+                # Extract the archives using 7z
+                try:
+                    # Extract ffmpeg
+                    subprocess.run(['7z', 'x', str(ffmpeg_archive_path), f'-o{temp_dir}'], 
+                                  check=True, capture_output=True)
                     
-                if FFPROBE_URL:
-                    ffprobe_check = subprocess.run(['file', str(ffprobe_path)], 
-                                                 capture_output=True, text=True, check=True)
-                    if 'Mach-O 64-bit executable arm64' not in ffprobe_check.stdout:
-                        print(f"Warning: Downloaded ffprobe binary is not macOS ARM64 compatible: {ffprobe_check.stdout}")
+                    # Extract ffprobe
+                    subprocess.run(['7z', 'x', str(ffprobe_archive_path), f'-o{temp_dir}'], 
+                                  check=True, capture_output=True)
+                    
+                    # Find the extracted binaries
+                    ffmpeg_found = False
+                    ffprobe_found = False
+                    
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            if file == "ffmpeg" and not ffmpeg_found:
+                                source_path = os.path.join(root, file)
+                                shutil.copy2(source_path, ffmpeg_path)
+                                ffmpeg_path.chmod(0o755)
+                                ffmpeg_found = True
+                                print(f"Copied ffmpeg to {ffmpeg_path}")
+                            elif file == "ffprobe" and not ffprobe_found:
+                                source_path = os.path.join(root, file)
+                                shutil.copy2(source_path, ffprobe_path)
+                                ffprobe_path.chmod(0o755)
+                                ffprobe_found = True
+                                print(f"Copied ffprobe to {ffprobe_path}")
+                    
+                    if not ffmpeg_found or not ffprobe_found:
+                        print("Error: Could not find ffmpeg and/or ffprobe in the extracted archives.")
                         return False
-                        
-                print("Verified macOS ARM64 compatibility for both binaries")
-            except subprocess.CalledProcessError as e:
-                print(f"Error verifying binary compatibility: {e}")
-                return False
-            
-            print("Downloaded ffmpeg and ffprobe")
-            return True
+                    
+                    # Verify the binaries are macOS ARM64 compatible
+                    try:
+                        ffmpeg_check = subprocess.run(['file', str(ffmpeg_path)], 
+                                                     capture_output=True, text=True, check=True)
+                        if 'Mach-O 64-bit executable arm64' not in ffmpeg_check.stdout:
+                            print(f"Warning: Downloaded ffmpeg binary is not macOS ARM64 compatible: {ffmpeg_check.stdout}")
+                            return False
+                            
+                        ffprobe_check = subprocess.run(['file', str(ffprobe_path)], 
+                                                     capture_output=True, text=True, check=True)
+                        if 'Mach-O 64-bit executable arm64' not in ffprobe_check.stdout:
+                            print(f"Warning: Downloaded ffprobe binary is not macOS ARM64 compatible: {ffprobe_check.stdout}")
+                            return False
+                            
+                        print("Verified macOS ARM64 compatibility for both binaries")
+                    except subprocess.CalledProcessError as e:
+                        print(f"Error verifying binary compatibility: {e}")
+                        return False
+                    
+                    print("Downloaded and extracted ffmpeg and ffprobe")
+                    return True
+                except subprocess.CalledProcessError as e:
+                    print(f"Error extracting archives: {e}")
+                    return False
+                except Exception as e:
+                    print(f"Unexpected error during extraction: {e}")
+                    return False
         else:
-            # For Intel macOS, download the individual binaries
+            # For Intel macOS, download the individual binaries directly
             if not download_file(FFMPEG_URL, ffmpeg_path):
                 return False
             
