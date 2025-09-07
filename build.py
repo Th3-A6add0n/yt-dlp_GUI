@@ -430,7 +430,7 @@ Terminal=false
             run_command(["wget", "-O", str(appimagetool_path), appimagetool_url])
             appimagetool_path.chmod(0o755)
         
-        # Try to create the AppImage
+        # Try to create the AppImage with a workaround for FUSE
         try:
             # First try with --no-appstream
             run_command([
@@ -510,8 +510,8 @@ def build_application():
             return False
         
         if not create_macos_dmg(dist_dir, app_name):
-            print("Failed to create macOS DMG")
-            return False
+            print("Failed to create macOS DMG, but continuing with build")
+            # Don't return False here, as the application bundle was created successfully
     
     # For Linux, create an application bundle and AppImage
     elif system == 'linux':

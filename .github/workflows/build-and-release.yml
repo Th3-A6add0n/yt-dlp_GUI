@@ -253,6 +253,36 @@ jobs:
             ls -la dist/
           fi
         continue-on-error: true
+      - name: Verify DMG exists (macOS)
+        id: verify_dmg_macos
+        if: matrix.os == 'macos-latest'
+        run: |
+          if [ -f "dist/yt-dlp GUI.dmg" ]; then
+            echo "DMG found."
+            echo "dmg_exists=true" >> $GITHUB_OUTPUT
+            echo "dmg_size=$(du -sh "dist/yt-dlp GUI.dmg" | cut -f1)" >> $GITHUB_OUTPUT
+          else
+            echo "DMG not found."
+            echo "dmg_exists=false" >> $GITHUB_OUTPUT
+            echo "Contents of dist directory:"
+            ls -la dist/
+          fi
+        continue-on-error: true
+      - name: Verify AppImage exists (Linux)
+        id: verify_appimage_linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -f "dist/yt-dlp GUI.AppImage" ]; then
+            echo "AppImage found."
+            echo "appimage_exists=true" >> $GITHUB_OUTPUT
+            echo "appimage_size=$(du -sh "dist/yt-dlp GUI.AppImage" | cut -f1)" >> $GITHUB_OUTPUT
+          else
+            echo "AppImage not found."
+            echo "appimage_exists=false" >> $GITHUB_OUTPUT
+            echo "Contents of dist directory:"
+            ls -la dist/
+          fi
+        continue-on-error: true
       - name: Upload artifact (Windows)
         if: matrix.os == 'windows-latest' && steps.verify_executable_windows.outputs.executable_exists == 'true'
         uses: actions/upload-artifact@v4
@@ -261,18 +291,18 @@ jobs:
           path: dist/yt-dlp GUI.exe
           retention-days: 30
       - name: Upload artifact (macOS)
-        if: matrix.os == 'macos-latest' && steps.verify_app_bundle_macos.outputs.app_bundle_exists == 'true'
+        if: matrix.os == 'macos-latest' && steps.verify_dmg_macos.outputs.dmg_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}
-          path: dist/yt-dlp GUI.app
+          path: dist/yt-dlp GUI.dmg
           retention-days: 30
       - name: Upload artifact (Linux)
-        if: matrix.os == 'ubuntu-latest' && steps.verify_app_bundle_linux.outputs.app_bundle_exists == 'true'
+        if: matrix.os == 'ubuntu-latest' && steps.verify_appimage_linux.outputs.appimage_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}
-          path: dist/yt-dlp GUI
+          path: dist/yt-dlp GUI.AppImage
           retention-days: 30
 
   release:
@@ -296,7 +326,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check_upgrades.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
+          tag_name: v${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check-updates.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
           name: Release ${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check-updates.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
           body: |
             Automated release of yt-dlp GUI with updated binaries.
@@ -305,9 +335,20 @@ jobs:
             FFmpeg version: ${{ needs.check-updates.outputs.ffmpeg_version }}
 
             This release includes the latest versions of yt-dlp and ffmpeg.
+            
+            ## Installation
+            
+            ### Windows
+            Download and run `yt-dlp GUI.exe`
+            
+            ### macOS
+            Download and open `yt-dlp GUI.dmg`, then drag the application to your Applications folder
+            
+            ### Linux
+            Download `yt-dlp GUI.AppImage`, make it executable with `chmod +x yt-dlp GUI.AppImage`, then run it
           files: |
             artifacts/yt-dlp-gui-windows-latest/yt-dlp GUI.exe
-            artifacts/yt-dlp-gui-macos-latest/yt-dlp GUI
-            artifacts/yt-dlp-gui-ubuntu-latest/yt-dlp GUI
+            artifacts/yt-dlp-gui-macos-latest/yt-dlp GUI.dmg
+            artifacts/yt-dlp-gui-ubuntu-latest/yt-dlp GUI.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
