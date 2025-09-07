@@ -39,6 +39,18 @@ jobs:
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
       
+      - name: List assets directory
+        run: |
+          echo "Contents of assets directory:"
+          find yt_dlp_gui/assets -type f -exec ls -la {} \;
+      
+      - name: Test binary execution
+        run: |
+          echo "Testing yt-dlp:"
+          python yt_dlp_gui/assets/linux/yt-dlp --version || echo "Failed to run yt-dlp"
+          echo "Testing ffmpeg:"
+          python yt_dlp_gui/assets/linux/ffmpeg -version | head -1 || echo "Failed to run ffmpeg"
+      
       - name: Get current versions
         id: get_versions
         run: |
