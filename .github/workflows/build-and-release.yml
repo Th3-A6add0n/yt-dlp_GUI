@@ -35,15 +35,17 @@ jobs:
         run: |
           # Stage the assets directory
           git add yt_dlp_gui/assets/
-          # Check if there are staged changes by capturing the exit code
+          # Check if there are staged changes
           git diff --staged --quiet
-          if ($LASTEXITCODE -eq 0) {
-            echo "No updates found."
-            echo "has_updates=false" >> $env:GITHUB_OUTPUT
-          } else {
+          if ($LASTEXITCODE -ne 0) {
             echo "Updates found."
             echo "has_updates=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "No updates found."
+            echo "has_updates=false" >> $env:GITHUB_OUTPUT
           }
+          # Explicitly set exit code to 0 to avoid error
+          exit 0
 
       - name: Build application
         if: steps.check_updates.outputs.has_updates == 'true'
