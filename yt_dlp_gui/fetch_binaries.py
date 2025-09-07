@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import re
 from pathlib import Path
+from urllib.parse import urljoin
 
 # Detect the platform
 system = platform.system().lower()
@@ -39,16 +40,16 @@ elif system == 'darwin':  # macOS
         # For arm64 macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For arm64 macOS, use Martin Riedl's builds
-        FFMPEG_URL = "https://ffmpeg.martin-riedl.de/file/ffmpeg/ffmpeg-release-arm64-static.zip"
-        FFPROBE_URL = None  # ffprobe is included in the same archive
+        # For arm64 macOS, we'll determine the URL dynamically
+        FFMPEG_URL = None  # Will be determined dynamically
+        FFPROBE_URL = None  # Will be determined dynamically
     else:  # x86_64
         # For Intel macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For Intel macOS, use Martin Riedl's builds
-        FFMPEG_URL = "https://ffmpeg.martin-riedl.de/file/ffmpeg/ffmpeg-release-x86_64-static.zip"
-        FFPROBE_URL = None  # ffprobe is included in the same archive
+        # For Intel macOS, we'll determine the URL dynamically
+        FFMPEG_URL = None  # Will be determined dynamically
+        FFPROBE_URL = None  # Will be determined dynamically
     
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 else:
@@ -60,6 +61,49 @@ ASSETS_DIR = Path(__file__).parent / "assets" / platform_folder
 
 # Define the root assets directory (for the icon)
 ROOT_ASSETS_DIR = Path(__file__).parent / "assets"
+
+def get_martin_riedl_urls(arch):
+    """Get the download URLs for Martin Riedl's ffmpeg builds."""
+    base_url = "https://ffmpeg.martin-riedl.de/"
+    
+    try:
+        # Get the download page
+        response = requests.get(base_url)
+        response.raise_for_status()
+        
+        # Parse the HTML to find the download links
+        import re
+        from html.parser import HTMLParser
+        
+        class LinkParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links = []
+            
+            def handle_starttag(self, tag, attrs):
+                if tag == 'a':
+                    attrs_dict = dict(attrs)
+                    if 'href' in attrs_dict:
+                        self.links.append(attrs_dict['href'])
+        
+        parser = LinkParser()
+        parser.feed(response.text)
+        
+        # Find the links for the specified architecture
+        arch_pattern = f"download/macos/{arch}/"
+        ffmpeg_url = None
+        ffprobe_url = None
+        
+        for link in parser.links:
+            if arch_pattern in link and "ffmpeg.zip" in link:
+                ffmpeg_url = urljoin(base_url, link)
+            elif arch_pattern in link and "ffprobe.zip" in link:
+                ffprobe_url = urljoin(base_url, link)
+        
+        return ffmpeg_url, ffprobe_url
+    except Exception as e:
+        print(f"Error getting Martin Riedl URLs: {e}")
+        return None, None
 
 def get_yt_dlp_version(executable_path):
     """Get the version of the installed yt-dlp executable."""
@@ -295,112 +339,113 @@ def download_ffmpeg():
         # Detect the architecture
         architecture = platform.machine().lower()
         
+        # Get the URLs dynamically
         if architecture == 'arm64':
-            # For arm64 macOS, download and extract the ZIP archive
+            ffmpeg_url, ffprobe_url = get_martin_riedl_urls('arm64')
+        else:
+            ffmpeg_url, ffprobe_url = get_martin_riedl_urls('amd64')
+        
+        if not ffmpeg_url:
+            print("Error: Could not determine ffmpeg download URL")
+            return False
+        
+        # Download ffmpeg
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Download ffmpeg
+            ffmpeg_archive_path = temp_path / "ffmpeg.zip"
+            if not download_file(ffmpeg_url, ffmpeg_archive_path):
+                return False
+            
+            # Extract ffmpeg
+            try:
+                with zipfile.ZipFile(ffmpeg_archive_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+                
+                # Find the ffmpeg binary
+                ffmpeg_found = False
+                for root, dirs, files in os.walk(temp_dir):
+                    for file in files:
+                        if file == "ffmpeg" and not ffmpeg_found:
+                            source_path = os.path.join(root, file)
+                            shutil.copy2(source_path, ffmpeg_path)
+                            ffmpeg_path.chmod(0o755)
+                            ffmpeg_found = True
+                            print(f"Copied ffmpeg to {ffmpeg_path}")
+                
+                if not ffmpeg_found:
+                    print("Error: Could not find ffmpeg in the archive.")
+                    return False
+                
+                # Verify the binary is macOS compatible
+                try:
+                    ffmpeg_check = subprocess.run(['file', str(ffmpeg_path)], 
+                                                 capture_output=True, text=True, check=True)
+                    
+                    expected_format = 'Mach-O 64-bit executable arm64' if architecture == 'arm64' else 'Mach-O 64-bit executable x86_64'
+                    if expected_format not in ffmpeg_check.stdout:
+                        print(f"Warning: Downloaded ffmpeg binary is not compatible: {ffmpeg_check.stdout}")
+                        return False
+                        
+                    print(f"Verified {architecture} compatibility for ffmpeg")
+                except subprocess.CalledProcessError as e:
+                    print(f"Error verifying binary compatibility: {e}")
+                    return False
+            except Exception as e:
+                print(f"Error extracting ffmpeg: {e}")
+                return False
+        
+        # Download ffprobe if URL is available
+        if ffprobe_url:
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
                 
-                # Download the ZIP archive
-                archive_path = temp_path / "ffmpeg.zip"
-                if not download_file(FFMPEG_URL, archive_path):
+                # Download ffprobe
+                ffprobe_archive_path = temp_path / "ffprobe.zip"
+                if not download_file(ffprobe_url, ffprobe_archive_path):
                     return False
                 
-                # Extract the ZIP archive
+                # Extract ffprobe
                 try:
-                    with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    with zipfile.ZipFile(ffprobe_archive_path, 'r') as zip_ref:
                         zip_ref.extractall(temp_dir)
                     
-                    # Find the ffmpeg and ffprobe binaries
-                    ffmpeg_found = False
+                    # Find the ffprobe binary
                     ffprobe_found = False
-                    
                     for root, dirs, files in os.walk(temp_dir):
                         for file in files:
-                            if file == "ffmpeg" and not ffmpeg_found:
-                                source_path = os.path.join(root, file)
-                                shutil.copy2(source_path, ffmpeg_path)
-                                ffmpeg_path.chmod(0o755)
-                                ffmpeg_found = True
-                                print(f"Copied ffmpeg to {ffmpeg_path}")
-                            elif file == "ffprobe" and not ffprobe_found:
+                            if file == "ffprobe" and not ffprobe_found:
                                 source_path = os.path.join(root, file)
                                 shutil.copy2(source_path, ffprobe_path)
                                 ffprobe_path.chmod(0o755)
                                 ffprobe_found = True
                                 print(f"Copied ffprobe to {ffprobe_path}")
-                    
-                    if not ffmpeg_found:
-                        print("Error: Could not find ffmpeg in the archive.")
+                
+                    if not ffprobe_found:
+                        print("Error: Could not find ffprobe in the archive.")
                         return False
                     
-                    # Verify the binaries are macOS ARM64 compatible
+                    # Verify the binary is macOS compatible
                     try:
-                        ffmpeg_check = subprocess.run(['file', str(ffmpeg_path)], 
+                        ffprobe_check = subprocess.run(['file', str(ffprobe_path)], 
                                                      capture_output=True, text=True, check=True)
-                        if 'Mach-O 64-bit executable arm64' not in ffmpeg_check.stdout:
-                            print(f"Warning: Downloaded ffmpeg binary is not macOS ARM64 compatible: {ffmpeg_check.stdout}")
+                        
+                        expected_format = 'Mach-O 64-bit executable arm64' if architecture == 'arm64' else 'Mach-O 64-bit executable x86_64'
+                        if expected_format not in ffprobe_check.stdout:
+                            print(f"Warning: Downloaded ffprobe binary is not compatible: {ffprobe_check.stdout}")
                             return False
                             
-                        if ffprobe_found:
-                            ffprobe_check = subprocess.run(['file', str(ffprobe_path)], 
-                                                         capture_output=True, text=True, check=True)
-                            if 'Mach-O 64-bit executable arm64' not in ffprobe_check.stdout:
-                                print(f"Warning: Downloaded ffprobe binary is not macOS ARM64 compatible: {ffprobe_check.stdout}")
-                                return False
-                                
-                        print("Verified macOS ARM64 compatibility for binaries")
+                        print(f"Verified {architecture} compatibility for ffprobe")
                     except subprocess.CalledProcessError as e:
                         print(f"Error verifying binary compatibility: {e}")
                         return False
-                    
-                    print("Downloaded and extracted ffmpeg")
-                    return True
                 except Exception as e:
-                    print(f"Error extracting ffmpeg: {e}")
+                    print(f"Error extracting ffprobe: {e}")
                     return False
-        else:
-            # For Intel macOS, download and extract the ZIP archive
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                
-                # Download the ZIP archive
-                archive_path = temp_path / "ffmpeg.zip"
-                if not download_file(FFMPEG_URL, archive_path):
-                    return False
-                
-                # Extract the ZIP archive
-                try:
-                    with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-                        zip_ref.extractall(temp_dir)
-                    
-                    # Find the ffmpeg and ffprobe binaries
-                    ffmpeg_found = False
-                    ffprobe_found = False
-                    
-                    for root, dirs, files in os.walk(temp_dir):
-                        for file in files:
-                            if file == "ffmpeg" and not ffmpeg_found:
-                                source_path = os.path.join(root, file)
-                                shutil.copy2(source_path, ffmpeg_path)
-                                ffmpeg_path.chmod(0o755)
-                                ffmpeg_found = True
-                                print(f"Copied ffmpeg to {ffmpeg_path}")
-                            elif file == "ffprobe" and not ffprobe_found:
-                                source_path = os.path.join(root, file)
-                                shutil.copy2(source_path, ffprobe_path)
-                                ffprobe_path.chmod(0o755)
-                                ffprobe_found = True
-                                print(f"Copied ffprobe to {ffprobe_path}")
-                    
-                    if not ffmpeg_found:
-                        print("Error: Could not find ffmpeg in the archive.")
-                        return False
-                    
-                    print("Downloaded and extracted ffmpeg")
-                    return True
-                except Exception as e:
-                    print(f"Error extracting ffmpeg: {e}")
-                    return False
+        
+        print("Downloaded ffmpeg and ffprobe")
+        return True
     
     # For Windows and Linux (existing code)
     with tempfile.TemporaryDirectory() as temp_dir:
