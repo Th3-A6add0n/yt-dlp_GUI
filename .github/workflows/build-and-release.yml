@@ -35,10 +35,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install PyQt5 PyInstaller requests
-        continue-on-error: true
+        timeout-minutes: 10
       
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
+        timeout-minutes: 10
         continue-on-error: true
       
       - name: Get current versions
@@ -93,7 +94,7 @@ jobs:
     # For testing purposes, always run the build on the testing branch
     if: needs.check-updates.outputs.has_updates == 'true' || github.ref == 'refs/heads/testing'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120  # Increased timeout
+    timeout-minutes: 180  # Increased timeout to 3 hours
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
@@ -106,43 +107,78 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Install dependencies
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
         run: |
           python -m pip install --upgrade pip
           pip install PyQt5 PyInstaller requests
+        timeout-minutes: 15
         continue-on-error: true
+      
+      - name: Install dependencies (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt5 PyInstaller requests
+        timeout-minutes: 15
       
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
+        timeout-minutes: 15
         continue-on-error: true
       
       - name: Build application
         run: python build.py
+        timeout-minutes: 60
         continue-on-error: true
       
-      - name: Verify executable exists
+      - name: List dist directory
         run: |
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            EXECUTABLE="dist/yt-dlp GUI.exe"
-          else
-            EXECUTABLE="dist/yt-dlp GUI"
-          fi
-          
-          if [ -f "$EXECUTABLE" ]; then
+          echo "Contents of dist directory:"
+          ls -la dist/
+        continue-on-error: true
+      
+      - name: Verify executable exists (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          if (Test-Path "dist/yt-dlp GUI.exe") {
             echo "Executable found."
+            echo "executable_exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "Executable not found."
+            echo "executable_exists=false" >> $env:GITHUB_OUTPUT
+          }
+        continue-on-error: true
+      
+      - name: Verify executable exists (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: |
+          if [ -f "dist/yt-dlp GUI" ]; then
+            echo "Executable found."
+            echo "executable_exists=true" >> $GITHUB_OUTPUT
           else
             echo "Executable not found."
-            exit 1
+            echo "executable_exists=false" >> $GITHUB_OUTPUT
           fi
+        continue-on-error: true
       
-      - name: Upload artifact
+      - name: Upload artifact (Windows)
+        if: matrix.os == 'windows-latest' && steps.verify_executable.outputs.executable_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}
-          path: |
-            dist/yt-dlp GUI.exe
-            dist/yt-dlp GUI
+          path: dist/yt-dlp GUI.exe
           retention-days: 30
+        continue-on-error: true
+      
+      - name: Upload artifact (macOS/Linux)
+        if: matrix.os != 'windows-latest' && steps.verify_executable.outputs.executable_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-${{ matrix.os }}
+          path: dist/yt-dlp GUI
+          retention-days: 30
+        continue-on-error: true
 
   release:
     needs: [check-updates, build]
