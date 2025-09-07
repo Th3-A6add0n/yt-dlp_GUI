@@ -130,24 +130,36 @@ jobs:
           echo "Run number: ${{ github.run_number }}"
           echo "Tag name: v${{ steps.date.outputs.date }}.${{ github.run_number }}"
 
-      - name: Create Release
-        id: create_release
+      - name: Install GitHub CLI
         if: steps.check_updates.outputs.has_updates == 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.date.outputs.date }}.${{ github.run_number }}
-          name: Release ${{ steps.date.outputs.date }}.${{ github.run_number }}
-          body: |
-            Automated release of yt-dlp GUI with updated binaries.
-            
-            yt-dlp version: ${{ steps.get_versions.outputs.yt_dlp_version }}
-            FFmpeg version: ${{ steps.get_versions.outputs.ffmpeg_version }}
-            
-            This release includes the latest versions of yt-dlp and ffmpeg.
-          files: |
-            dist/yt-dlp GUI.exe
+        run: |
+          # Install GitHub CLI
+          $url = "https://github.com/cli/cli/releases/download/v2.40.1/gh_2.40.1_windows_amd64.zip"
+          Invoke-WebRequest -Uri $url -OutFile gh.zip
+          Expand-Archive -Path gh.zip -DestinationPath .
+          echo "::add-path::$env:GITHUB_WORKSPACE"
+
+      - name: Create Release with GitHub CLI
+        if: steps.check_updates.outputs.has_updates == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tagName = "v${{ steps.date.outputs.date }}.${{ github.run_number }}"
+          $releaseTitle = "Release ${{ steps.date.outputs.date }}.${{ github.run_number }}"
+          $releaseNotes = @"
+          Automated release of yt-dlp GUI with updated binaries.
+          
+          yt-dlp version: ${{ steps.get_versions.outputs.yt_dlp_version }}
+          FFmpeg version: ${{ steps.get_versions.outputs.ffmpeg_version }}
+          
+          This release includes the latest versions of yt-dlp and ffmpeg.
+          "@
+          
+          # Create release
+          gh release create $tagName --title "$releaseTitle" --notes "$releaseNotes" "dist/yt-dlp GUI.exe"
+          
+          echo "Release created successfully."
+          echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/$tagName"
 
       - name: Log release result
         if: steps.check_updates.outputs.has_updates == 'true'
@@ -155,4 +167,3 @@ jobs:
           echo "Release step completed."
           echo "has_updates: ${{ steps.check_updates.outputs.has_updates }}"
           echo "executable_exists: ${{ steps.verify_executable.outputs.executable_exists }}"
-          echo "Release created: ${{ steps.create_release.outputs.url }}"
