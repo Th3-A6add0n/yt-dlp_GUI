@@ -1,4 +1,4 @@
-name: Build and Release yt-dlp GUI
+name: Testing Build and Release yt-dlp GUI
 
 on:
   schedule:
