@@ -181,18 +181,25 @@ def create_linux_app_bundle(dist_dir, app_name):
     lib_dir = app_dir / "lib"
     plugins_dir = app_dir / "plugins"
     
+    # Check if the executable already exists as a file
+    executable_path = dist_dir / app_name
+    if executable_path.exists() and executable_path.is_file():
+        # Move the executable to a temporary location
+        temp_executable = dist_dir / f"{app_name}.bin"
+        shutil.move(str(executable_path), str(temp_executable))
+        print(f"Moved executable to temporary location: {temp_executable}")
+    
     # Create directories
     bin_dir.mkdir(parents=True, exist_ok=True)
     lib_dir.mkdir(parents=True, exist_ok=True)
     plugins_dir.mkdir(parents=True, exist_ok=True)
     
     # Move the executable to the bin directory
-    executable_path = dist_dir / app_name
-    if executable_path.exists():
-        shutil.move(str(executable_path), str(bin_dir / app_name))
+    if temp_executable.exists():
+        shutil.move(str(temp_executable), str(bin_dir / app_name))
         print(f"Moved executable to {bin_dir / app_name}")
     else:
-        print(f"Error: Executable not found at {executable_path}")
+        print(f"Error: Executable not found")
         return False
     
     # Copy Qt plugins if they exist

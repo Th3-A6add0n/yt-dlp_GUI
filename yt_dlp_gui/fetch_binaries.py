@@ -27,10 +27,12 @@ if system == 'windows':
     YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
     FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     FFMPEG_BINARIES = ["ffmpeg.exe", "ffprobe.exe"]
+    FFPROBE_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"  # Added this line
 elif system == 'linux':
     YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
     FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
+    FFPROBE_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"  # Added this line
 elif system == 'darwin':  # macOS
     # Detect the architecture
     architecture = platform.machine().lower()
