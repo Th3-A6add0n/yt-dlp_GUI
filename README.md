@@ -1,4 +1,3 @@
-```markdown
 # yt-dlp GUI
 
 A simple, multi-platform and user-friendly GUI for yt-dlp
@@ -202,4 +201,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 If you encounter any issues or have questions, please open an issue on the [GitHub Issues page](https://github.com/yourusername/yt-dlp-gui/issues).
 I will try to use the AI to fix your issues, just like I used it to create this app 🥲
-```
