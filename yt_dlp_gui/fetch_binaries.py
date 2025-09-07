@@ -39,9 +39,9 @@ elif system == 'darwin':  # macOS
         # For arm64 macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For arm64 macOS, use the static builds from johnvansickle.com
-        FFMPEG_URL = "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz"
-        FFPROBE_URL = None  # We'll extract ffprobe from the same archive
+        # For arm64 macOS, use the static builds from evermeet.cx
+        FFMPEG_URL = "https://evermeet.cx/ffmpeg/getrelease/ffmpeg"
+        FFPROBE_URL = "https://evermeet.cx/ffmpeg/getrelease/ffprobe"
     else:  # x86_64
         # For Intel macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
@@ -97,12 +97,12 @@ def get_ffmpeg_version(executable_path):
         
         # For macOS ARM64, check if the binary is compatible before running
         if system == 'darwin' and architecture == 'arm64':
-            # Check file format to ensure it's ARM64
+            # Check file format to ensure it's macOS ARM64
             try:
                 file_check = subprocess.run(['file', str(executable_path)], 
                                           capture_output=True, text=True, check=True)
-                if 'ARM64' not in file_check.stdout and 'arm64' not in file_check.stdout:
-                    print(f"Warning: ffmpeg binary is not ARM64 compatible: {file_check.stdout}")
+                if 'Mach-O 64-bit executable arm64' not in file_check.stdout:
+                    print(f"Warning: ffmpeg binary is not macOS ARM64 compatible: {file_check.stdout}")
                     return "incompatible"
             except subprocess.CalledProcessError as e:
                 print(f"Error checking file format: {e}")
@@ -143,7 +143,7 @@ def get_ffmpeg_version(executable_path):
         print(f"Error running ffmpeg: {e}")
         # For macOS ARM64, provide a more specific error message
         if system == 'darwin' and architecture == 'arm64' and "Exec format error" in str(e):
-            print("This is likely due to an incompatible binary architecture. ARM64 binaries are required for Apple Silicon Macs.")
+            print("This is likely due to an incompatible binary architecture. macOS ARM64 binaries are required for Apple Silicon Macs.")
         return None
     except FileNotFoundError:
         print(f"FFmpeg executable not found at {executable_path}")
@@ -295,69 +295,40 @@ def download_ffmpeg():
         architecture = platform.machine().lower()
         
         if architecture == 'arm64':
-            # For arm64 macOS, download and extract the tar.xz archive
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                archive_path = temp_path / "ffmpeg.tar.xz"
-                
-                # Download the archive
-                if not download_file(FFMPEG_URL, archive_path):
+            # For arm64 macOS, download the individual binaries directly
+            if not download_file(FFMPEG_URL, ffmpeg_path):
+                return False
+            
+            if FFPROBE_URL and not download_file(FFPROBE_URL, ffprobe_path):
+                return False
+            
+            # Set executable permissions
+            ffmpeg_path.chmod(0o755)
+            if FFPROBE_URL:
+                ffprobe_path.chmod(0o755)
+            
+            # Verify the binaries are macOS ARM64 compatible
+            try:
+                ffmpeg_check = subprocess.run(['file', str(ffmpeg_path)], 
+                                             capture_output=True, text=True, check=True)
+                if 'Mach-O 64-bit executable arm64' not in ffmpeg_check.stdout:
+                    print(f"Warning: Downloaded ffmpeg binary is not macOS ARM64 compatible: {ffmpeg_check.stdout}")
                     return False
-                
-                # Extract the archive
-                try:
-                    with tarfile.open(archive_path, 'r:xz') as tar_ref:
-                        tar_ref.extractall(temp_dir)
                     
-                    # Find the ffmpeg and ffprobe binaries
-                    ffmpeg_found = False
-                    ffprobe_found = False
-                    
-                    for root, dirs, files in os.walk(temp_dir):
-                        for file in files:
-                            if file == "ffmpeg" and not ffmpeg_found:
-                                source_path = os.path.join(root, file)
-                                dest_path = ASSETS_DIR / "ffmpeg"
-                                shutil.copy2(source_path, dest_path)
-                                os.chmod(dest_path, 0o755)
-                                ffmpeg_found = True
-                                print(f"Copied ffmpeg to {dest_path}")
-                            elif file == "ffprobe" and not ffprobe_found:
-                                source_path = os.path.join(root, file)
-                                dest_path = ASSETS_DIR / "ffprobe"
-                                shutil.copy2(source_path, dest_path)
-                                os.chmod(dest_path, 0o755)
-                                ffprobe_found = True
-                                print(f"Copied ffprobe to {dest_path}")
-                    
-                    if not ffmpeg_found or not ffprobe_found:
-                        print("Error: Could not find ffmpeg and/or ffprobe in the archive.")
+                if FFPROBE_URL:
+                    ffprobe_check = subprocess.run(['file', str(ffprobe_path)], 
+                                                 capture_output=True, text=True, check=True)
+                    if 'Mach-O 64-bit executable arm64' not in ffprobe_check.stdout:
+                        print(f"Warning: Downloaded ffprobe binary is not macOS ARM64 compatible: {ffprobe_check.stdout}")
                         return False
-                    
-                    # Verify the binaries are ARM64 compatible
-                    try:
-                        ffmpeg_check = subprocess.run(['file', str(ASSETS_DIR / "ffmpeg")], 
-                                                     capture_output=True, text=True, check=True)
-                        if 'ARM64' not in ffmpeg_check.stdout and 'arm64' not in ffmpeg_check.stdout:
-                            print(f"Warning: Downloaded ffmpeg binary is not ARM64 compatible: {ffmpeg_check.stdout}")
-                            return False
-                            
-                        ffprobe_check = subprocess.run(['file', str(ASSETS_DIR / "ffprobe")], 
-                                                     capture_output=True, text=True, check=True)
-                        if 'ARM64' not in ffprobe_check.stdout and 'arm64' not in ffprobe_check.stdout:
-                            print(f"Warning: Downloaded ffprobe binary is not ARM64 compatible: {ffprobe_check.stdout}")
-                            return False
-                            
-                        print("Verified ARM64 compatibility for both binaries")
-                    except subprocess.CalledProcessError as e:
-                        print(f"Error verifying binary compatibility: {e}")
-                        return False
-                    
-                    print("Downloaded and extracted ffmpeg and ffprobe")
-                    return True
-                except Exception as e:
-                    print(f"Error extracting ffmpeg: {e}")
-                    return False
+                        
+                print("Verified macOS ARM64 compatibility for both binaries")
+            except subprocess.CalledProcessError as e:
+                print(f"Error verifying binary compatibility: {e}")
+                return False
+            
+            print("Downloaded ffmpeg and ffprobe")
+            return True
         else:
             # For Intel macOS, download the individual binaries
             if not download_file(FFMPEG_URL, ffmpeg_path):
