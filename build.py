@@ -184,15 +184,14 @@ def create_macos_dmg(dist_dir, app_name):
     
     try:
         # Create a temporary DMG
-        dmg_size = 50  # Size in MB
         run_command([
             "hdiutil", "create", "-srcfolder", str(app_bundle), 
-            "-volname", app_name, "-vfs", "APFS", "-fs", "HFS+", 
+            "-volname", app_name, "-fs", "HFS+", 
             "-fsargs", "-c c=64,a=16,e=16", 
             "-format", "UDZO", str(temp_dmg_path)
         ])
         
-        # Create the final DMG with a license agreement and background
+        # Create the final DMG with better compression
         run_command([
             "hdiutil", "convert", str(temp_dmg_path), 
             "-format", "UDZO", "-imagekey", "zlib-level=9", 
