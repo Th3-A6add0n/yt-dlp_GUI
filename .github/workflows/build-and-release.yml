@@ -149,6 +149,7 @@ jobs:
         continue-on-error: true
       
       - name: Verify executable exists (Windows)
+        id: verify_executable
         if: matrix.os == 'windows-latest'
         run: |
           if (Test-Path "dist/yt-dlp GUI.exe") {
@@ -161,14 +162,15 @@ jobs:
         continue-on-error: true
       
       - name: Verify executable exists (macOS/Linux)
+        id: verify_executable
         if: matrix.os != 'windows-latest'
         run: |
           if [ -f "dist/yt-dlp GUI" ]; then
             echo "Executable found."
-            echo "executable_exists=true" >> $GITHUB_OUTPUT
+            echo "executable_exists=true" >> $env:GITHUB_OUTPUT
           else
             echo "Executable not found."
-            echo "executable_exists=false" >> $GITHUB_OUTPUT
+            echo "executable_exists=false" >> $env:GITHUB_OUTPUT
           fi
         continue-on-error: true
       
