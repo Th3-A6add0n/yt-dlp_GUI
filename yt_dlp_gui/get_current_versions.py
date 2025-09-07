@@ -26,7 +26,7 @@ elif system.startswith('darwin'):
     ffmpeg_name = 'ffmpeg'
     ffprobe_name = 'ffprobe'
 else:
-    print(f"Unsupported platform: {system}")
+    print(f"Unsupported platform: {system}", file=sys.stderr)
     print("yt_dlp_version=")
     print("ffmpeg_version=")
     sys.exit(0)
@@ -39,7 +39,7 @@ def get_yt_dlp_version(executable_path):
     try:
         # Make sure the file exists
         if not executable_path.exists():
-            print(f"yt-dlp executable not found at {executable_path}")
+            print(f"yt-dlp executable not found at {executable_path}", file=sys.stderr)
             return ""
         
         # Make sure it's executable on non-Windows
@@ -54,10 +54,10 @@ def get_yt_dlp_version(executable_path):
             check=True
         )
         version = result.stdout.strip()
-        print(f"yt-dlp version: {version}")
+        print(f"yt-dlp version: {version}", file=sys.stderr)
         return version
     except Exception as e:
-        print(f"Error getting yt-dlp version: {e}")
+        print(f"Error getting yt-dlp version: {e}", file=sys.stderr)
         return ""
 
 def get_ffmpeg_version(executable_path):
@@ -65,7 +65,7 @@ def get_ffmpeg_version(executable_path):
     try:
         # Make sure the file exists
         if not executable_path.exists():
-            print(f"ffmpeg executable not found at {executable_path}")
+            print(f"ffmpeg executable not found at {executable_path}", file=sys.stderr)
             return ""
         
         # Make sure it's executable on non-Windows
@@ -80,14 +80,14 @@ def get_ffmpeg_version(executable_path):
             check=True
         )
         first_line = result.stdout.split('\n')[0]
-        print(f"ffmpeg version output: {first_line}")
+        print(f"ffmpeg version output: {first_line}", file=sys.stderr)
         
         # Try to extract the publication date from the version string
         date_match = re.search(r'-(\d{8})\b', first_line)
         if date_match:
             date_str = date_match.group(1)
             formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-            print(f"Extracted FFmpeg publication date: {formatted_date}")
+            print(f"Extracted FFmpeg publication date: {formatted_date}", file=sys.stderr)
             return formatted_date
         
         # If date extraction fails, try to extract build number
@@ -102,33 +102,33 @@ def get_ffmpeg_version(executable_path):
             match = re.search(pattern, first_line)
             if match:
                 version = match.group(1)
-                print(f"Extracted FFmpeg version: {version}")
+                print(f"Extracted FFmpeg version: {version}", file=sys.stderr)
                 return version
         
         # If all else fails, return the first line
         return first_line
     except Exception as e:
-        print(f"Error getting ffmpeg version: {e}")
+        print(f"Error getting ffmpeg version: {e}", file=sys.stderr)
         return ""
 
 def main():
     yt_dlp_path = PLATFORM_DIR / yt_dlp_name
     ffmpeg_path = PLATFORM_DIR / ffmpeg_name
     
-    print(f"Looking for yt-dlp at: {yt_dlp_path}")
-    print(f"Looking for ffmpeg at: {ffmpeg_path}")
+    print(f"Looking for yt-dlp at: {yt_dlp_path}", file=sys.stderr)
+    print(f"Looking for ffmpeg at: {ffmpeg_path}", file=sys.stderr)
     
     # Check if files exist
     if not yt_dlp_path.exists():
-        print(f"yt-dlp executable not found at {yt_dlp_path}")
+        print(f"yt-dlp executable not found at {yt_dlp_path}", file=sys.stderr)
     if not ffmpeg_path.exists():
-        print(f"ffmpeg executable not found at {ffmpeg_path}")
+        print(f"ffmpeg executable not found at {ffmpeg_path}", file=sys.stderr)
     
     # Get versions
     yt_dlp_version = get_yt_dlp_version(yt_dlp_path)
     ffmpeg_version = get_ffmpeg_version(ffmpeg_path)
     
-    # Print in GitHub Actions format
+    # Print in GitHub Actions format (only these lines go to stdout)
     print(f"yt_dlp_version={yt_dlp_version}")
     print(f"ffmpeg_version={ffmpeg_version}")
 
