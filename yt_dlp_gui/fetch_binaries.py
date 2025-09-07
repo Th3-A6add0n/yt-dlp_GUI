@@ -41,6 +41,16 @@ ROOT_ASSETS_DIR = Path(__file__).parent / "assets"
 def get_yt_dlp_version(executable_path):
     """Get the version of the installed yt-dlp executable."""
     try:
+        # Make sure the file exists
+        if not executable_path.exists():
+            print(f"yt-dlp executable not found at {executable_path}")
+            return ""
+        
+        # Make sure it's executable on non-Windows
+        if not sys.platform.startswith('win'):
+            executable_path.chmod(0o755)
+        
+        # Run the command
         result = subprocess.run([str(executable_path), "--version"], 
                               capture_output=True, text=True, check=True)
         version = result.stdout.strip()
@@ -53,6 +63,16 @@ def get_yt_dlp_version(executable_path):
 def get_ffmpeg_version(executable_path):
     """Get the version of the installed ffmpeg executable."""
     try:
+        # Make sure the file exists
+        if not executable_path.exists():
+            print(f"ffmpeg executable not found at {executable_path}")
+            return ""
+        
+        # Make sure it's executable on non-Windows
+        if not sys.platform.startswith('win'):
+            executable_path.chmod(0o755)
+        
+        # Run the command
         result = subprocess.run([str(executable_path), "-version"], 
                               capture_output=True, text=True, check=True)
         first_line = result.stdout.split('\n')[0]
@@ -163,6 +183,10 @@ def download_yt_dlp():
     
     # Check if file exists
     if destination.exists():
+        # Set executable permission before trying to run it
+        if not sys.platform.startswith('win'):
+            destination.chmod(0o755)
+        
         current_version = get_yt_dlp_version(destination)
         latest_version = get_latest_yt_dlp_version()
         
@@ -183,6 +207,11 @@ def download_ffmpeg():
     
     # Check if both files exist
     if ffmpeg_path.exists() and ffprobe_path.exists():
+        # Set executable permissions before trying to run them
+        if not sys.platform.startswith('win'):
+            ffmpeg_path.chmod(0o755)
+            ffprobe_path.chmod(0o755)
+        
         current_version = get_ffmpeg_version(ffmpeg_path)
         latest_version = get_latest_ffmpeg_version()
         
@@ -205,8 +234,8 @@ def download_ffmpeg():
             return False
         
         # Set executable permissions
-        os.chmod(ffmpeg_path, 0o755)
-        os.chmod(ffprobe_path, 0o755)
+        ffmpeg_path.chmod(0o755)
+        ffprobe_path.chmod(0o755)
         
         print("Downloaded ffmpeg and ffprobe")
         return True
