@@ -159,8 +159,8 @@ jobs:
           # Extract GitHub CLI to the temporary directory
           Expand-Archive -Path "gh-cli-temp/gh.zip" -DestinationPath "gh-cli-temp" -Force
           
-          # Add GitHub CLI to PATH
-          echo "::add-path::$env:GITHUB_WORKSPACE\gh-cli-temp\bin"
+          # Add GitHub CLI to PATH using Environment Files
+          echo "GITHUB_CLI_PATH=$env:GITHUB_WORKSPACE\gh-cli-temp\bin" >> $env:GITHUB_ENV
           
           # Clean up
           Remove-Item "gh-cli-temp/gh.zip" -Force

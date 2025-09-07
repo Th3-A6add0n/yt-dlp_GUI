@@ -12,8 +12,8 @@ from pathlib import Path
 YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
 
-# Define the assets directory - this needs to be fixed
-ASSETS_DIR = Path("yt_dlp_gui/assets")
+# Define the assets directory relative to this script's location
+ASSETS_DIR = Path(__file__).parent / "assets"
 
 def get_yt_dlp_version(executable_path):
     """Get the version of the installed yt-dlp executable."""
@@ -35,12 +35,23 @@ def get_ffmpeg_version(executable_path):
         first_line = result.stdout.split('\n')[0]
         print(f"FFmpeg version output: {first_line}")
         
-        # Try multiple patterns to extract version
+        # Try to extract the publication date from the version string
+        # Format: ffmpeg version N-XXXXXX-gXXXXXXX-YYYYMMDD
+        # Look for the date pattern anywhere in the string, not just at the end
+        date_match = re.search(r'-(\d{8})\b', first_line)
+        if date_match:
+            date_str = date_match.group(1)
+            # Format as YYYY-MM-DD for comparison
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            print(f"Extracted FFmpeg publication date: {formatted_date}")
+            return formatted_date
+        
+        # If date extraction fails, try to extract build number
         patterns = [
+            r'ffmpeg version N-(\d+)-g',  # For nightly builds like "N-121001-gadc66f30ee"
             r'ffmpeg version (\d+\.\d+(?:\.\d+)?)',  # Standard version pattern
             r'ffmpeg version n(\d+\.\d+(?:\.\d+)?)',  # Sometimes there's an 'n' prefix
             r'version (\d+\.\d+(?:\.\d+)?)',         # Just the version part
-            r'N-(\d+)-g',                         # For nightly builds like "N-121001-gadc66f30ee"
         ]
         
         for pattern in patterns:
@@ -158,13 +169,21 @@ def download_ffmpeg():
         print(f"Current ffmpeg version: {current_version}")
         print(f"Latest ffmpeg version: {latest_version}")
         
-        # For FFmpeg-Builds, we'll always download the latest since version comparison is tricky
-        # with nightly builds and "latest" tags
-        if current_version and latest_version and current_version == latest_version:
-            print(f"ffmpeg.exe and ffprobe.exe are up to date (version {current_version})")
-            return True
+        # Check if we have valid version information
+        if current_version and latest_version:
+            # If both versions are dates in YYYY-MM-DD format, compare them directly
+            if re.match(r'\d{4}-\d{2}-\d{2}', current_version) and re.match(r'\d{4}-\d{2}-\d{2}', latest_version):
+                if current_version == latest_version:
+                    print(f"ffmpeg.exe and ffprobe.exe are up to date (version {current_version})")
+                    return True
+                else:
+                    print(f"Updating ffmpeg/ffprobe from {current_version} to {latest_version}")
+            else:
+                # If we can't compare versions properly, always update to be safe
+                print(f"Cannot compare versions properly. Updating ffmpeg/ffprobe from {current_version} to {latest_version}")
         else:
-            print(f"Updating ffmpeg/ffprobe from {current_version} to {latest_version}")
+            # If we don't have valid version information, always update
+            print("Missing version information. Updating ffmpeg/ffprobe to be safe.")
     else:
         print("ffmpeg.exe or ffprobe.exe not found, downloading...")
     
@@ -207,7 +226,7 @@ def main():
     """Main function to download all required binaries."""
     try:
         # Create the assets directory if it doesn't exist
-        ASSETS_DIR.mkdir(exist_ok=True)
+        ASSETS_DIR.mkdir(exist_ok=True, parents=True)
         
         # Download yt-dlp
         if not download_yt_dlp():
