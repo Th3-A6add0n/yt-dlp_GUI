@@ -22,7 +22,7 @@ elif system.startswith('linux'):
     ffprobe_name = 'ffprobe'
 elif system.startswith('darwin'):
     platform_dir = 'macos'
-    yt_dlp_name = 'yt-dlp'
+    yt_dlp_name = 'yt-dlp_macos'  # Note the different name for macOS
     ffmpeg_name = 'ffmpeg'
     ffprobe_name = 'ffprobe'
 else:
@@ -54,6 +54,7 @@ def get_yt_dlp_version(executable_path):
             check=True
         )
         version = result.stdout.strip()
+        print(f"yt-dlp version: {version}")
         return version
     except Exception as e:
         print(f"Error getting yt-dlp version: {e}")
@@ -79,12 +80,14 @@ def get_ffmpeg_version(executable_path):
             check=True
         )
         first_line = result.stdout.split('\n')[0]
+        print(f"ffmpeg version output: {first_line}")
         
         # Try to extract the publication date from the version string
         date_match = re.search(r'-(\d{8})\b', first_line)
         if date_match:
             date_str = date_match.group(1)
             formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            print(f"Extracted FFmpeg publication date: {formatted_date}")
             return formatted_date
         
         # If date extraction fails, try to extract build number
@@ -99,6 +102,7 @@ def get_ffmpeg_version(executable_path):
             match = re.search(pattern, first_line)
             if match:
                 version = match.group(1)
+                print(f"Extracted FFmpeg version: {version}")
                 return version
         
         # If all else fails, return the first line
@@ -110,6 +114,15 @@ def get_ffmpeg_version(executable_path):
 def main():
     yt_dlp_path = PLATFORM_DIR / yt_dlp_name
     ffmpeg_path = PLATFORM_DIR / ffmpeg_name
+    
+    print(f"Looking for yt-dlp at: {yt_dlp_path}")
+    print(f"Looking for ffmpeg at: {ffmpeg_path}")
+    
+    # Check if files exist
+    if not yt_dlp_path.exists():
+        print(f"yt-dlp executable not found at {yt_dlp_path}")
+    if not ffmpeg_path.exists():
+        print(f"ffmpeg executable not found at {ffmpeg_path}")
     
     # Get versions
     yt_dlp_version = get_yt_dlp_version(yt_dlp_path)
