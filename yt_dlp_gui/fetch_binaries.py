@@ -39,8 +39,8 @@ elif system == 'darwin':  # macOS
         # For arm64 macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For arm64 macOS, use the static builds from ffmpeg.martin-riedl.de
-        FFMPEG_URL = "https://ffmpeg.martin-riedl.de/info.php?url=ffmpeg/ffmpeg-release-arm64-static.zip&download=1"
+        # For arm64 macOS, use the static builds from the official ffmpeg website
+        FFMPEG_URL = "https://github.com/FFmpeg/FFmpeg/releases/download/n6.0/ffmpeg-n6.0-latest-macos64-arm64.zip"
         FFPROBE_URL = None  # ffprobe is included in the same archive
     else:  # x86_64
         # For Intel macOS, use the universal binary from yt-dlp

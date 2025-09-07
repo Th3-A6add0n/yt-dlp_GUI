@@ -4,6 +4,7 @@ import subprocess
 import shutil
 import platform
 import plistlib
+import signal
 from pathlib import Path
 
 def run_command(cmd, check=True, cwd=None, timeout=None):
@@ -12,12 +13,28 @@ def run_command(cmd, check=True, cwd=None, timeout=None):
     if cwd:
         print(f"Working directory: {cwd}")
     
-    # Set a longer timeout for PyInstaller on Windows
+    # Set a longer timeout for PyInstaller
     if timeout is None and len(cmd) > 0 and "pyinstaller" in cmd[0].lower():
         timeout = 3600  # 1 hour timeout for PyInstaller
     
     try:
+        # Set up signal handlers to prevent keyboard interrupt
+        def signal_handler(sig, frame):
+            print(f"Received signal {sig}, ignoring...")
+            # Don't exit, just continue
+        
+        # Register signal handlers for SIGINT (Ctrl+C) and SIGTERM
+        original_sigint = signal.getsignal(signal.SIGINT)
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
         result = subprocess.run(cmd, check=False, text=True, capture_output=True, cwd=cwd, timeout=timeout)
+        
+        # Restore original signal handlers
+        signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, original_sigterm)
+        
         print(f"Return code: {result.returncode}")
         if result.stdout:
             print("STDOUT:")
@@ -30,6 +47,9 @@ def run_command(cmd, check=True, cwd=None, timeout=None):
         return result
     except subprocess.TimeoutExpired:
         print(f"Command timed out after {timeout} seconds")
+        # Restore original signal handlers
+        signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, original_sigterm)
         if check:
             raise
         return None
@@ -81,6 +101,10 @@ def create_macos_app_bundle(dist_dir, app_name):
     
     # Copy the icon if it exists
     icon_source = Path(__file__).parent / "yt_dlp_gui" / "assets" / "macos" / "icon.icns"
+    if not icon_source.exists():
+        # Try the root assets directory
+        icon_source = Path(__file__).parent / "yt_dlp_gui" / "assets" / "icon.icns"
+    
     if icon_source.exists():
         shutil.copy(str(icon_source), str(resources_dir / "icon.icns"))
         print(f"Copied icon to {resources_dir / 'icon.icns'}")
@@ -157,26 +181,18 @@ def create_linux_app_bundle(dist_dir, app_name):
     lib_dir = app_dir / "lib"
     plugins_dir = app_dir / "plugins"
     
-    # Check if the executable already exists
-    executable_path = dist_dir / app_name
-    if executable_path.exists():
-        print(f"Found existing executable at {executable_path}")
-        # Rename the executable to avoid conflicts
-        backup_path = dist_dir / f"{app_name}.bin"
-        shutil.move(str(executable_path), str(backup_path))
-        print(f"Moved executable to {backup_path}")
-    
     # Create directories
     bin_dir.mkdir(parents=True, exist_ok=True)
     lib_dir.mkdir(parents=True, exist_ok=True)
     plugins_dir.mkdir(parents=True, exist_ok=True)
     
-    # Move the backup executable to the bin directory
-    if backup_path.exists():
-        shutil.move(str(backup_path), str(bin_dir / app_name))
+    # Move the executable to the bin directory
+    executable_path = dist_dir / app_name
+    if executable_path.exists():
+        shutil.move(str(executable_path), str(bin_dir / app_name))
         print(f"Moved executable to {bin_dir / app_name}")
     else:
-        print(f"Error: Executable not found at {backup_path}")
+        print(f"Error: Executable not found at {executable_path}")
         return False
     
     # Copy Qt plugins if they exist
@@ -227,6 +243,10 @@ Categories=AudioVideo;Video;Network;
     
     # Copy the icon if it exists
     icon_source = Path(__file__).parent / "yt_dlp_gui" / "assets" / "linux" / "icon.png"
+    if not icon_source.exists():
+        # Try the root assets directory
+        icon_source = Path(__file__).parent / "yt_dlp_gui" / "assets" / "icon.png"
+    
     if icon_source.exists():
         shutil.copy(str(icon_source), str(app_dir / "icon.png"))
         print(f"Copied icon to {app_dir / 'icon.png'}")
@@ -268,14 +288,18 @@ def build_application():
     print("Fetching binaries...")
     sys.path.insert(0, os.path.join(script_dir, 'yt_dlp_gui'))
     import fetch_binaries
-    fetch_binaries.main()
+    if not fetch_binaries.main():
+        print("Failed to fetch binaries, but continuing with build...")
     
     # Look for the spec file in the root directory
     spec_file = script_dir / "yt_dlp_gui.spec"
     
     if spec_file.exists():
         print(f"Using spec file: {spec_file}")
-        run_command(["pyinstaller", str(spec_file)], cwd=script_dir)
+        result = run_command(["pyinstaller", str(spec_file)], cwd=script_dir)
+        if result is None:
+            print("PyInstaller command timed out")
+            return False
     else:
         print(f"Error: Spec file not found at {spec_file}")
         return False
@@ -302,6 +326,9 @@ def build_application():
         executable_path = dist_dir / "yt-dlp GUI.exe"
         if executable_path.exists():
             print("Windows executable created successfully")
+        else:
+            print("Error: Windows executable not found")
+            return False
     
     return True
 
