@@ -208,24 +208,14 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           $exePath = "dist/yt-dlp GUI.exe"
-          $debugExePath = "dist/yt-dlp GUI_debug.exe"
           
           if (Test-Path $exePath) {
             $fileInfo = Get-Item $exePath
             echo "Executable found."
             echo "executable_exists=true" >> $env:GITHUB_OUTPUT
             echo "file_size=$($fileInfo.Length)" >> $env:GITHUB_OUTPUT
-            echo "executable_path=$exePath" >> $env:GITHUB_OUTPUT
             echo "File details:"
             Get-Item $exePath | Format-List
-          } elseif (Test-Path $debugExePath) {
-            $fileInfo = Get-Item $debugExePath
-            echo "Debug executable found."
-            echo "executable_exists=true" >> $env:GITHUB_OUTPUT
-            echo "file_size=$($fileInfo.Length)" >> $env:GITHUB_OUTPUT
-            echo "executable_path=$debugExePath" >> $env:GITHUB_OUTPUT
-            echo "File details:"
-            Get-Item $debugExePath | Format-List
           } else {
             echo "Executable not found."
             echo "executable_exists=false" >> $env:GITHUB_OUTPUT
@@ -243,7 +233,7 @@ jobs:
             echo "app_size=$(du -sh "dist/yt-dlp GUI.app" | cut -f1)" >> $GITHUB_OUTPUT
           else
             echo "Application bundle not found."
-            echo "app_bundle_exists=false" >> $env:GITHUB_OUTPUT
+            echo "app_bundle_exists=false" >> $GITHUB_OUTPUT
             echo "Contents of dist directory:"
             ls -la dist/
           fi
@@ -268,7 +258,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}
-          path: ${{ steps.verify_executable_windows.outputs.executable_path }}
+          path: dist/yt-dlp GUI.exe
           retention-days: 30
       - name: Upload artifact (macOS)
         if: matrix.os == 'macos-latest' && steps.verify_app_bundle_macos.outputs.app_bundle_exists == 'true'
@@ -306,7 +296,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check-updates.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
+          tag_name: v${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check_upgrades.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
           name: Release ${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check-updates.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
           body: |
             Automated release of yt-dlp GUI with updated binaries.
