@@ -39,8 +39,8 @@ elif system == 'darwin':  # macOS
         # For arm64 macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For arm64 macOS, use the static builds from osxexperts.net
-        FFMPEG_URL = "https://www.osxexperts.net/downloads/ffmpeg6.0_arm64.zip"
+        # For arm64 macOS, use the static builds from ffmpeg.martin-riedl.de
+        FFMPEG_URL = "https://ffmpeg.martin-riedl.de/info.php?url=ffmpeg/ffmpeg-release-arm64-static.zip&download=1"
         FFPROBE_URL = None  # ffprobe is included in the same archive
     else:  # x86_64
         # For Intel macOS, use the universal binary from yt-dlp
@@ -161,7 +161,7 @@ def get_latest_yt_dlp_version():
     except Exception as e:
         print(f"Error getting latest yt-dlp version: {e}")
         # If we hit a rate limit, assume we're up to date
-        if "rate limit exceeded" in str(e):
+        if "rate limit exceeded" in str(e).lower():
             print("Rate limit exceeded, assuming we're up to date")
             return "current"
         return None
@@ -201,7 +201,7 @@ def get_latest_ffmpeg_version():
     except Exception as e:
         print(f"Error getting latest ffmpeg version: {e}")
         # If we hit a rate limit, assume we're up to date
-        if "rate limit exceeded" in str(e):
+        if "rate limit exceeded" in str(e).lower():
             print("Rate limit exceeded, assuming we're up to date")
             return "current"
         return None
@@ -258,11 +258,12 @@ def download_ffmpeg():
     ffprobe_path = ASSETS_DIR / FFMPEG_BINARIES[1]
     
     # Check if both files exist
-    if ffmpeg_path.exists() and ffprobe_path.exists():
+    if ffmpeg_path.exists() and (FFPROBE_URL is None or ffprobe_path.exists()):
         # Set executable permissions before trying to run them
         if not sys.platform.startswith('win'):
             ffmpeg_path.chmod(0o755)
-            ffprobe_path.chmod(0o755)
+            if FFPROBE_URL is not None:
+                ffprobe_path.chmod(0o755)
         
         current_version = get_ffmpeg_version(ffmpeg_path)
         latest_version = get_latest_ffmpeg_version()
@@ -340,7 +341,14 @@ def download_ffmpeg():
                             print(f"Warning: Downloaded ffmpeg binary is not macOS ARM64 compatible: {ffmpeg_check.stdout}")
                             return False
                             
-                        print("Verified macOS ARM64 compatibility for ffmpeg")
+                        if ffprobe_found:
+                            ffprobe_check = subprocess.run(['file', str(ffprobe_path)], 
+                                                         capture_output=True, text=True, check=True)
+                            if 'Mach-O 64-bit executable arm64' not in ffprobe_check.stdout:
+                                print(f"Warning: Downloaded ffprobe binary is not macOS ARM64 compatible: {ffprobe_check.stdout}")
+                                return False
+                                
+                        print("Verified macOS ARM64 compatibility for binaries")
                     except subprocess.CalledProcessError as e:
                         print(f"Error verifying binary compatibility: {e}")
                         return False
