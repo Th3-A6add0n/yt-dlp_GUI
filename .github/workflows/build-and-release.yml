@@ -7,6 +7,7 @@ on:
   workflow_dispatch: # Allows manual triggering
   push:
     branches:
+      - main
       - testing
 
 permissions:
@@ -81,7 +82,11 @@ jobs:
   build:
     needs: check-updates
     # For testing purposes, always run the build on the testing branch
-    if: needs.check-updates.outputs.has_updates == 'true' || github.ref == 'refs/heads/testing'
+    # For main branch, only run if there are updates or it's a scheduled run
+    if: |
+      (github.ref == 'refs/heads/testing') ||
+      (github.ref == 'refs/heads/main' && needs.check-updates.outputs.has_updates == 'true') ||
+      (github.event_name == 'schedule' && github.ref == 'refs/heads/main')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180 # Increased timeout to 3 hours
     strategy:
@@ -315,7 +320,7 @@ jobs:
   release:
     needs: [check-updates, build]
     # Only create releases if there are actual updates, not for testing
-    if: needs.check-updates.outputs.has_updates == 'true' && github.ref != 'refs/heads/testing'
+    if: needs.check-updates.outputs.has_updates == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
