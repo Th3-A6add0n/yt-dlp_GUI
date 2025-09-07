@@ -37,6 +37,11 @@ jobs:
         id: get_versions
         run: python yt_dlp_gui/get_versions.py
 
+      - name: Debug versions
+        run: |
+          echo "yt-dlp version: ${{ steps.get_versions.outputs.yt_dlp_version }}"
+          echo "ffmpeg version: ${{ steps.get_versions.outputs.ffmpeg_version }}"
+
       - name: Check for updates
         id: check_updates
         run: |
@@ -52,9 +57,18 @@ jobs:
           $newYtDlpVersion = "${{ steps.get_versions.outputs.yt_dlp_version }}"
           $newFfmpegVersion = "${{ steps.get_versions.outputs.ffmpeg_version }}"
           
+          # Debug current versions
+          echo "Current yt-dlp version: $($currentVersions."yt-dlp")"
+          echo "Current ffmpeg version: $($currentVersions.ffmpeg)"
+          echo "New yt-dlp version: $newYtDlpVersion"
+          echo "New ffmpeg version: $newFfmpegVersion"
+          
           # Check if versions have changed
           $ytDlpUpdated = $currentVersions."yt-dlp" -ne $newYtDlpVersion
           $ffmpegUpdated = $currentVersions.ffmpeg -ne $newFfmpegVersion
+          
+          echo "yt-dlp updated: $ytDlpUpdated"
+          echo "ffmpeg updated: $ffmpegUpdated"
           
           if ($ytDlpUpdated -or $ffmpegUpdated) {
             echo "Updates found."
@@ -86,6 +100,7 @@ jobs:
         run: python build.py
 
       - name: Verify executable exists
+        id: verify_executable
         if: steps.check_updates.outputs.has_updates == 'true'
         run: |
           if (Test-Path "dist/yt-dlp GUI.exe") {
@@ -97,12 +112,26 @@ jobs:
             exit 1
           }
 
+      - name: List dist directory contents
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          echo "Contents of dist directory:"
+          Get-ChildItem -Path "dist" | Format-Table Name, Length
+
       - name: Get current date
         id: date
         if: steps.check_updates.outputs.has_updates == 'true'
         run: echo "date=$(date +'%Y%m%d')" >> $env:GITHUB_OUTPUT
 
+      - name: Debug release info
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          echo "Date output: ${{ steps.date.outputs.date }}"
+          echo "Run number: ${{ github.run_number }}"
+          echo "Tag name: v${{ steps.date.outputs.date }}.${{ github.run_number }}"
+
       - name: Create Release
+        id: create_release
         if: steps.check_updates.outputs.has_updates == 'true'
         uses: softprops/action-gh-release@v1
         with:
@@ -126,3 +155,4 @@ jobs:
           echo "Release step completed."
           echo "has_updates: ${{ steps.check_updates.outputs.has_updates }}"
           echo "executable_exists: ${{ steps.verify_executable.outputs.executable_exists }}"
+          echo "Release created: ${{ steps.create_release.outputs.url }}"
