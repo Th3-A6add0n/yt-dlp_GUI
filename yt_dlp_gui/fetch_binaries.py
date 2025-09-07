@@ -31,14 +31,12 @@ elif system == 'linux':
     FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 elif system == 'darwin':  # macOS
-    # Set URLs based on architecture
-    if architecture == 'arm64':
-        YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos_arm64"
-        FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macos-arm64-gpl.tar.xz"
-    else:  # x86_64
-        YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
-        FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macos64-gpl.tar.xz"
+    # For macOS, use the universal binary from yt-dlp
+    YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
     
+    # For macOS, use the evermeet.cx URLs (they have universal binaries)
+    FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
+    FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 else:
     print(f"Unsupported platform: {system}")
@@ -133,6 +131,10 @@ def get_latest_yt_dlp_version():
         return version
     except Exception as e:
         print(f"Error getting latest yt-dlp version: {e}")
+        # If we hit a rate limit, assume we're up to date
+        if "rate limit exceeded" in str(e):
+            print("Rate limit exceeded, assuming we're up to date")
+            return "current"
         return None
 
 def get_latest_ffmpeg_version():
@@ -169,6 +171,10 @@ def get_latest_ffmpeg_version():
         return None
     except Exception as e:
         print(f"Error getting latest ffmpeg version: {e}")
+        # If we hit a rate limit, assume we're up to date
+        if "rate limit exceeded" in str(e):
+            print("Rate limit exceeded, assuming we're up to date")
+            return "current"
         return None
 
 def download_file(url, destination):
@@ -202,6 +208,11 @@ def download_yt_dlp():
         current_version = get_yt_dlp_version(destination)
         latest_version = get_latest_yt_dlp_version()
         
+        # If we hit rate limit, assume we're up to date
+        if latest_version == "current":
+            print(f"Rate limit exceeded, assuming yt-dlp is up to date (version {current_version})")
+            return True
+        
         if current_version and latest_version and current_version == latest_version:
             print(f"yt-dlp is up to date (version {current_version})")
             return True
@@ -227,6 +238,11 @@ def download_ffmpeg():
         current_version = get_ffmpeg_version(ffmpeg_path)
         latest_version = get_latest_ffmpeg_version()
         
+        # If we hit rate limit, assume we're up to date
+        if latest_version == "current":
+            print(f"Rate limit exceeded, assuming ffmpeg is up to date (version {current_version})")
+            return True
+        
         if current_version and latest_version and current_version == latest_version:
             print(f"ffmpeg and ffprobe are up to date (version {current_version})")
             return True
@@ -235,44 +251,22 @@ def download_ffmpeg():
     else:
         print("ffmpeg or ffprobe not found, downloading...")
     
-    # For macOS (both Intel and Apple Silicon)
+    # Special handling for macOS
     if system == 'darwin':
-        # Download and extract the tar.xz archive
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            archive_path = temp_path / "ffmpeg.tar.xz"
-            
-            # Download the archive
-            if not download_file(FFMPEG_URL, archive_path):
-                return False
-            
-            # Extract the archive
-            try:
-                with tarfile.open(archive_path, 'r:xz') as tar_ref:
-                    tar_ref.extractall(temp_dir)
-                
-                # Find the bin directory
-                bin_dir = None
-                for root, dirs, files in os.walk(temp_dir):
-                    if "bin" in dirs:
-                        bin_dir = os.path.join(root, "bin")
-                        break
-                
-                if not bin_dir:
-                    print("Error: Could not find bin directory in the ffmpeg archive.")
-                    return False
-                
-                # Copy ffmpeg and ffprobe to the assets directory
-                for binary in FFMPEG_BINARIES:
-                    shutil.copy2(os.path.join(bin_dir, binary), ASSETS_DIR)
-                    # Set executable permission
-                    os.chmod(ASSETS_DIR / binary, 0o755)
-                
-                print("Downloaded and extracted ffmpeg and ffprobe")
-                return True
-            except Exception as e:
-                print(f"Error extracting ffmpeg: {e}")
-                return False
+        # Download ffmpeg
+        if not download_file(FFMPEG_URL, ffmpeg_path):
+            return False
+        
+        # Download ffprobe
+        if not download_file(FFPROBE_URL, ffprobe_path):
+            return False
+        
+        # Set executable permissions
+        ffmpeg_path.chmod(0o755)
+        ffprobe_path.chmod(0o755)
+        
+        print("Downloaded ffmpeg and ffprobe")
+        return True
     
     # For Windows and Linux
     with tempfile.TemporaryDirectory() as temp_dir:
