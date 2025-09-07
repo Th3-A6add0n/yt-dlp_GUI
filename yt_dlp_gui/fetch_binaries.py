@@ -15,6 +15,12 @@ system = platform.system().lower()
 # Also detect the architecture
 architecture = platform.machine().lower()
 
+# Map system name to folder name
+if system == 'darwin':
+    platform_folder = 'macos'  # Map 'darwin' to 'macos' folder
+else:
+    platform_folder = system
+
 # Define URLs and file names based on platform
 if system == 'windows':
     YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
@@ -25,18 +31,21 @@ elif system == 'linux':
     FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 elif system == 'darwin':  # macOS
-    YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+    # Set URLs based on architecture
+    if architecture == 'arm64':
+        YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos_arm64"
+        FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macos-arm64-gpl.tar.xz"
+    else:  # x86_64
+        YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+        FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-macos64-gpl.tar.xz"
     
-    # For macOS, use the evermeet.cx URLs (they have universal binaries)
-    FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
-    FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 else:
     print(f"Unsupported platform: {system}")
     sys.exit(1)
 
 # Define the assets directory
-ASSETS_DIR = Path(__file__).parent / "assets" / system
+ASSETS_DIR = Path(__file__).parent / "assets" / platform_folder
 
 # Define the root assets directory (for the icon)
 ROOT_ASSETS_DIR = Path(__file__).parent / "assets"
@@ -226,22 +235,44 @@ def download_ffmpeg():
     else:
         print("ffmpeg or ffprobe not found, downloading...")
     
-    # Special handling for macOS
+    # For macOS (both Intel and Apple Silicon)
     if system == 'darwin':
-        # Download ffmpeg
-        if not download_file(FFMPEG_URL, ffmpeg_path):
-            return False
-        
-        # Download ffprobe
-        if not download_file(FFPROBE_URL, ffprobe_path):
-            return False
-        
-        # Set executable permissions
-        ffmpeg_path.chmod(0o755)
-        ffprobe_path.chmod(0o755)
-        
-        print("Downloaded ffmpeg and ffprobe")
-        return True
+        # Download and extract the tar.xz archive
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            archive_path = temp_path / "ffmpeg.tar.xz"
+            
+            # Download the archive
+            if not download_file(FFMPEG_URL, archive_path):
+                return False
+            
+            # Extract the archive
+            try:
+                with tarfile.open(archive_path, 'r:xz') as tar_ref:
+                    tar_ref.extractall(temp_dir)
+                
+                # Find the bin directory
+                bin_dir = None
+                for root, dirs, files in os.walk(temp_dir):
+                    if "bin" in dirs:
+                        bin_dir = os.path.join(root, "bin")
+                        break
+                
+                if not bin_dir:
+                    print("Error: Could not find bin directory in the ffmpeg archive.")
+                    return False
+                
+                # Copy ffmpeg and ffprobe to the assets directory
+                for binary in FFMPEG_BINARIES:
+                    shutil.copy2(os.path.join(bin_dir, binary), ASSETS_DIR)
+                    # Set executable permission
+                    os.chmod(ASSETS_DIR / binary, 0o755)
+                
+                print("Downloaded and extracted ffmpeg and ffprobe")
+                return True
+            except Exception as e:
+                print(f"Error extracting ffmpeg: {e}")
+                return False
     
     # For Windows and Linux
     with tempfile.TemporaryDirectory() as temp_dir:

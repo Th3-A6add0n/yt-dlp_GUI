@@ -12,7 +12,11 @@ current_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 system = platform.system().lower()
 
 # Define the assets directory based on platform
-assets_dir = os.path.join(current_dir, 'yt_dlp_gui', 'assets', system)
+if system == 'darwin':
+    platform_folder = 'macos'  # Map 'darwin' to 'macos' folder
+else:
+    platform_folder = system
+assets_dir = os.path.join(current_dir, 'yt_dlp_gui', 'assets', platform_folder)
 
 # Define the root assets directory (where the icon is located)
 root_assets_dir = os.path.join(current_dir, 'yt_dlp_gui', 'assets')
@@ -23,6 +27,11 @@ if system == 'windows':
     ffmpeg_name = 'ffmpeg.exe'
     ffprobe_name = 'ffprobe.exe'
     icon_extension = '.ico'
+elif system == 'darwin':
+    yt_dlp_name = 'yt-dlp_macos'
+    ffmpeg_name = 'ffmpeg'
+    ffprobe_name = 'ffprobe'
+    icon_extension = '.png'
 else:
     yt_dlp_name = 'yt-dlp'
     ffmpeg_name = 'ffmpeg'

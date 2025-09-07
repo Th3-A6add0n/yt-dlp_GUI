@@ -20,9 +20,9 @@ elif system.startswith('linux'):
     yt_dlp_name = 'yt-dlp'
     ffmpeg_name = 'ffmpeg'
     ffprobe_name = 'ffprobe'
-elif system.startswith('darwin'):
-    platform_dir = 'macos'
-    yt_dlp_name = 'yt-dlp_macos'  # Note the different name for macOS
+elif system.startswith('darwin'):  # macOS
+    platform_dir = 'macos'  # Use 'macos' instead of 'darwin'
+    yt_dlp_name = 'yt-dlp_macos'  # Use the correct filename
     ffmpeg_name = 'ffmpeg'
     ffprobe_name = 'ffprobe'
 else:
