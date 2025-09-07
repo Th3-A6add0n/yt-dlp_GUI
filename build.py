@@ -385,11 +385,16 @@ def create_linux_appimage(dist_dir, app_name):
                 shutil.copy(str(desktop_file), str(appdir_usr_share_applications))
                 print(f"Copied desktop file to {appdir_usr_share_applications}")
             
-            # Copy icon
+            # Copy icon to the correct location for AppImage
             icon_file = app_dir / "icon.png"
             if icon_file.exists():
+                # Copy to the AppDir root (required by AppImage)
+                shutil.copy(str(icon_file), str(appdir_path / f"{app_name}.png"))
+                print(f"Copied icon to {appdir_path / f'{app_name}.png'}")
+                
+                # Also copy to the standard icon directory
                 shutil.copy(str(icon_file), str(appdir_usr_share_icons_hicolor_256x256_apps / f"{app_name}.png"))
-                print(f"Copied icon to {appdir_usr_share_icons_hicolor_256x256_apps}")
+                print(f"Copied icon to {appdir_usr_share_icons_hicolor_256x256_apps / f'{app_name}.png'}")
         
         # Create the AppRun script
         apprun_path = appdir_path / "AppRun"
@@ -408,7 +413,7 @@ def create_linux_appimage(dist_dir, app_name):
         # Make AppRun executable
         apprun_path.chmod(0o755)
         
-        # Create the .desktop file for AppImage
+        # Create the .desktop file for AppImage with fixed categories
         desktop_path = appdir_path / f"{app_name}.desktop"
         with open(desktop_path, 'w') as f:
             f.write(f"""[Desktop Entry]
@@ -416,7 +421,7 @@ Name={app_name}
 Exec={app_name}
 Icon={app_name}
 Type=Application
-Categories=AudioVideo;Video;Network;
+Categories=AudioVideo;
 Comment=Download videos from YouTube and other sites
 Terminal=false
 """)
