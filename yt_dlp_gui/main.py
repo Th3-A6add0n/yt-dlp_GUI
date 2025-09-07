@@ -596,10 +596,21 @@ class MainWindow(QMainWindow):
 
 def main():
     """Main function."""
+    # Set Qt plugin path for Linux
+    if system == 'linux':
+        qt_plugin_path = os.path.join(APPLICATION_PATH, 'platforms')
+        if os.path.exists(qt_plugin_path):
+            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = qt_plugin_path
+        
+        # Also set the library path if needed
+        lib_path = os.path.join(APPLICATION_PATH)
+        if os.path.exists(lib_path):
+            os.environ['LD_LIBRARY_PATH'] = lib_path + ':' + os.environ.get('LD_LIBRARY_PATH', '')
+    
     app = QApplication(sys.argv)
     
     # Set application icon
-    icon_path = os.path.join(ASSETS_DIR, "icon.ico")
+    icon_path = os.path.join(ASSETS_DIR, "icon.png" if system != 'windows' else "icon.ico")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     
@@ -607,7 +618,6 @@ def main():
     window.show()
     
     sys.exit(app.exec_())
-
 
 if __name__ == "__main__":
     main()

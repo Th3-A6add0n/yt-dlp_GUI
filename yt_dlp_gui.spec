@@ -73,16 +73,31 @@ import PyQt5
 qt_plugins_path = os.path.join(os.path.dirname(PyQt5.__file__), 'Qt5', 'plugins')
 
 if os.path.exists(qt_plugins_path):
+    # Include platform plugins
     a.datas += Tree(
         os.path.join(qt_plugins_path, 'platforms'),
         prefix='platforms',
         excludes=[]
     )
-    a.datas += Tree(
-        os.path.join(qt_plugins_path, 'imageformats'),
-        prefix='imageformats',
-        excludes=[]
-    )
+    
+    # Include image formats if needed
+    image_formats_path = os.path.join(qt_plugins_path, 'imageformats')
+    if os.path.exists(image_formats_path):
+        a.datas += Tree(
+            image_formats_path,
+            prefix='imageformats',
+            excludes=[]
+        )
+    
+    # Include xcbglintegrations for Linux
+    if system == 'linux':
+        xcbglintegrations_path = os.path.join(qt_plugins_path, 'xcbglintegrations')
+        if os.path.exists(xcbglintegrations_path):
+            a.datas += Tree(
+                xcbglintegrations_path,
+                prefix='xcbglintegrations',
+                excludes=[]
+            )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

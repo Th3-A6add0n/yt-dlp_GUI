@@ -55,6 +55,16 @@ def build_application():
         if executable_path.exists():
             print(f"Setting executable permission for {system}")
             os.chmod(executable_path, 0o755)
+            
+            # For Linux, create a wrapper script that sets the Qt plugin path
+            if system == 'linux':
+                wrapper_path = dist_dir / "yt-dlp_GUI.sh"
+                with open(wrapper_path, 'w') as f:
+                    f.write("#!/bin/bash\n")
+                    f.write(f"export QT_QPA_PLATFORM_PLUGIN_PATH=\"$(dirname \"$0\")/platforms\"\n")
+                    f.write(f"export LD_LIBRARY_PATH=\"$(dirname \"$0\"):$LD_LIBRARY_PATH\"\n")
+                    f.write(f"exec \"$(dirname \"$0\")/yt-dlp GUI\" \"$@\"\n")
+                os.chmod(wrapper_path, 0o755)
     
     return True
 
