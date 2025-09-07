@@ -84,7 +84,10 @@ def get_martin_riedl_urls(arch):
                 if tag == 'a':
                     attrs_dict = dict(attrs)
                     if 'href' in attrs_dict:
-                        self.links.append(attrs_dict['href'])
+                        href = attrs_dict['href']
+                        # Only include direct download links, not checksum files
+                        if href.endswith('.zip') and not href.endswith('.zip.sha256'):
+                            self.links.append(href)
         
         parser = LinkParser()
         parser.feed(response.text)
@@ -349,6 +352,10 @@ def download_ffmpeg():
             print("Error: Could not determine ffmpeg download URL")
             return False
         
+        print(f"Using ffmpeg URL: {ffmpeg_url}")
+        if ffprobe_url:
+            print(f"Using ffprobe URL: {ffprobe_url}")
+        
         # Download ffmpeg
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -356,6 +363,14 @@ def download_ffmpeg():
             # Download ffmpeg
             ffmpeg_archive_path = temp_path / "ffmpeg.zip"
             if not download_file(ffmpeg_url, ffmpeg_archive_path):
+                return False
+            
+            # Verify it's a valid ZIP file
+            try:
+                with zipfile.ZipFile(ffmpeg_archive_path, 'r') as test_zip:
+                    test_zip.testzip()
+            except zipfile.BadZipFile:
+                print("Error: Downloaded file is not a valid ZIP file")
                 return False
             
             # Extract ffmpeg
@@ -404,6 +419,14 @@ def download_ffmpeg():
                 # Download ffprobe
                 ffprobe_archive_path = temp_path / "ffprobe.zip"
                 if not download_file(ffprobe_url, ffprobe_archive_path):
+                    return False
+                
+                # Verify it's a valid ZIP file
+                try:
+                    with zipfile.ZipFile(ffprobe_archive_path, 'r') as test_zip:
+                        test_zip.testzip()
+                except zipfile.BadZipFile:
+                    print("Error: Downloaded file is not a valid ZIP file")
                     return False
                 
                 # Extract ffprobe
