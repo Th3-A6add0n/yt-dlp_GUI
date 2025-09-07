@@ -35,7 +35,11 @@ jobs:
       
       - name: Get current versions
         id: get_versions
-        run: python yt_dlp_gui/get_current_versions.py >> $env:GITHUB_OUTPUT
+        run: |
+          $output = python yt_dlp_gui/get_current_versions.py
+          foreach ($line in $output) {
+            echo $line >> $env:GITHUB_OUTPUT
+    }
       
       - name: Check for updates
         id: check_updates

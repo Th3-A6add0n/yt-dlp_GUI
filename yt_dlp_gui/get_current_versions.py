@@ -13,7 +13,7 @@ def main():
     yt_dlp_version = get_yt_dlp_version(yt_dlp_exe) or ""
     ffmpeg_version = get_ffmpeg_version(ffmpeg_exe) or ""
     
-    # Print in a format that can be captured by the workflow
+    # Print only the key-value pairs for GitHub Actions
     print(f"yt_dlp_version={yt_dlp_version}")
     print(f"ffmpeg_version={ffmpeg_version}")
 
