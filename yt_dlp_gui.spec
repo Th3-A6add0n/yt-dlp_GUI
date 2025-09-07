@@ -2,33 +2,51 @@
 
 import os
 import sys
-import shutil
+import platform
 from pathlib import Path
 
 # Get the current directory where the spec file is located
 current_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
-# Add the yt_dlp_gui directory to the path
-sys.path.insert(0, os.path.join(current_dir, 'yt_dlp_gui'))
+# Get the platform
+system = platform.system().lower()
 
-# Import and run the fetch_binaries script
-import fetch_binaries
-fetch_binaries.main()
+# Define the assets directory based on platform
+assets_dir = os.path.join(current_dir, 'yt_dlp_gui', 'assets', system)
+
+# Define the root assets directory (where the icon is located)
+root_assets_dir = os.path.join(current_dir, 'yt_dlp_gui', 'assets')
+
+# Define the binary names based on platform
+if system == 'windows':
+    yt_dlp_name = 'yt-dlp.exe'
+    ffmpeg_name = 'ffmpeg.exe'
+    ffprobe_name = 'ffprobe.exe'
+    icon_extension = '.ico'
+else:
+    yt_dlp_name = 'yt-dlp'
+    ffmpeg_name = 'ffmpeg'
+    ffprobe_name = 'ffprobe'
+    icon_extension = '.png'
+
+# Define the icon path from the root assets folder
+icon_path = os.path.join(root_assets_dir, f'icon{icon_extension}')
+
+# Check if icon file exists
+if not os.path.exists(icon_path):
+    print(f"Warning: Icon file {icon_path} not found. Building without icon.")
+    icon_path = None
 
 block_cipher = None
-
-# Get the absolute path to the assets directory
-assets_dir = os.path.join(current_dir, 'yt_dlp_gui', 'assets')
 
 a = Analysis(
     ['yt_dlp_gui/main.py'],
     pathex=[],
     binaries=[],
     datas=[
-        (os.path.join(assets_dir, 'yt-dlp.exe'), 'assets'),
-        (os.path.join(assets_dir, 'ffmpeg.exe'), 'assets'),
-        (os.path.join(assets_dir, 'ffprobe.exe'), 'assets'),
-        (os.path.join(assets_dir, 'icon.ico'), 'assets'),
+        (os.path.join(assets_dir, yt_dlp_name), 'assets'),
+        (os.path.join(assets_dir, ffmpeg_name), 'assets'),
+        (os.path.join(assets_dir, ffprobe_name), 'assets'),
     ],
     hiddenimports=[],
     hookspath=[],
@@ -79,10 +97,11 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(assets_dir, 'icon.ico'),
+    icon=icon_path,  # This will be None if icon doesn't exist
 )
 
 # Clean up build directories
 build_dir = os.path.join(current_dir, 'build')
 if os.path.exists(build_dir):
+    import shutil
     shutil.rmtree(build_dir)

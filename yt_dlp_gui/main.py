@@ -6,6 +6,7 @@ import threading
 import time
 import re
 import shutil
+import platform
 from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QLineEdit, QPushButton, QComboBox, QProgressBar, 
@@ -21,8 +22,11 @@ else:
     # If running as a script
     APPLICATION_PATH = os.path.dirname(os.path.abspath(__file__))
 
+# Determine the platform
+system = platform.system().lower()
+
 # Path to the assets directory
-ASSETS_DIR = os.path.join(APPLICATION_PATH, "assets")
+ASSETS_DIR = os.path.join(APPLICATION_PATH, "assets", system)
 
 # Path to the configuration file
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), "yt_dlp_gui_config.json")

@@ -2,7 +2,7 @@ import os
 import sys
 import subprocess
 import shutil
-import requests
+import platform
 from pathlib import Path
 
 def run_command(cmd, check=True, cwd=None):
@@ -22,98 +22,21 @@ def run_command(cmd, check=True, cwd=None):
         raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
     return result
 
-def check_python():
-    """Check if Python is installed and install it if needed."""
-    try:
-        result = run_command([sys.executable, "--version"], check=False)
-        if result.returncode == 0:
-            print(f"Python is already installed: {result.stdout.strip()}")
-            return sys.executable
-    except Exception as e:
-        print(f"Error checking Python: {e}")
-    
-    print("Python is not installed. Downloading Python installer...")
-    python_version = "3.11.4"
-    installer_name = f"python-{python_version}-amd64.exe"
-    installer_url = f"https://www.python.org/ftp/python/{python_version}/{installer_name}"
-    
-    # Download the installer
-    print(f"Downloading {installer_url}...")
-    response = requests.get(installer_url, stream=True)
-    with open(installer_name, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
-    
-    # Install Python
-    print("Installing Python...")
-    run_command([installer_name, "/quiet", "InstallAllUsers=0", "PrependPath=1", "Include_test=0"])
-    
-    # Clean up
-    os.remove(installer_name)
-    
-    # Find the installed Python
-    python_path = Path(os.path.expanduser("~")) / "AppData" / "Local" / "Programs" / "Python" / f"Python{python_version.replace('.', '')}"
-    python_exe = python_path / "python.exe"
-    
-    if python_exe.exists():
-        print(f"Python installed at: {python_exe}")
-        return str(python_exe)
-    else:
-        print("Could not find installed Python")
-        return None
-
-def install_packages(python_exe):
-    """Install required Python packages."""
-    print("Installing required packages...")
-    pip_exe = str(Path(python_exe).parent / "Scripts" / "pip.exe")
-    
-    run_command([pip_exe, "install", "--upgrade", "pip"])
-    run_command([pip_exe, "install", "PyQt5", "PyInstaller", "requests"])
-
-def download_binaries(python_exe):
-    """Download required binaries."""
-    print("Downloading required binaries...")
-    
-    # Get the directory of the build script
-    script_dir = Path(__file__).parent.resolve()
-    print(f"Script directory: {script_dir}")
-    
-    # Look for fetch_binaries.py in the yt_dlp_gui subdirectory
-    yt_dlp_gui_dir = script_dir / "yt_dlp_gui"
-    print(f"Checking yt_dlp_gui subdirectory: {yt_dlp_gui_dir}")
-    
-    if yt_dlp_gui_dir.exists():
-        print("Files in yt_dlp_gui subdirectory:")
-        for item in yt_dlp_gui_dir.iterdir():
-            print(f"  {item.name}")
-        
-        fetch_binaries_path = yt_dlp_gui_dir / "fetch_binaries.py"
-        print(f"Looking for fetch_binaries.py at: {fetch_binaries_path}")
-        
-        if not fetch_binaries_path.exists():
-            print(f"Error: fetch_binaries.py not found at {fetch_binaries_path}")
-            return False
-    else:
-        print(f"Error: yt_dlp_gui subdirectory not found at {yt_dlp_gui_dir}")
-        return False
-    
-    # Run the fetch_binaries.py script with detailed output
-    try:
-        run_command([python_exe, "-u", str(fetch_binaries_path)], cwd=yt_dlp_gui_dir)
-    except subprocess.CalledProcessError as e:
-        print(f"Error downloading binaries: {e}")
-        print(f"Return code: {e.returncode}")
-        print(f"Output: {e.stdout}")
-        print(f"Error: {e.stderr}")
-        return False
-    return True
-
 def build_application():
     """Build the application using PyInstaller."""
     print("Building the application...")
     
     # Get the directory of the build script
     script_dir = Path(__file__).parent.resolve()
+    
+    # Get the platform
+    system = platform.system().lower()
+    
+    # Run fetch_binaries to download the required binaries
+    print("Fetching binaries...")
+    sys.path.insert(0, os.path.join(script_dir, 'yt_dlp_gui'))
+    import fetch_binaries
+    fetch_binaries.main()
     
     # Look for the spec file in the root directory
     spec_file = script_dir / "yt_dlp_gui.spec"
@@ -124,6 +47,14 @@ def build_application():
     else:
         print(f"Error: Spec file not found at {spec_file}")
         return False
+    
+    # Rename the executable for non-Windows platforms
+    if system != 'windows':
+        dist_dir = script_dir / "dist"
+        executable_path = dist_dir / "yt-dlp GUI"
+        if executable_path.exists():
+            print(f"Setting executable permission for {system}")
+            os.chmod(executable_path, 0o755)
     
     return True
 
@@ -166,27 +97,9 @@ def main():
     print("===========================================")
     print()
     
-    # Print current working directory
+    # Print current working directory and platform
     print(f"Current working directory: {Path.cwd()}")
-    
-    # Check/install Python
-    python_exe = check_python()
-    if not python_exe:
-        print("Failed to install Python")
-        return 1
-    
-    # Install packages
-    install_packages(python_exe)
-    
-    # Create assets directory if it doesn't exist
-    assets_dir = Path("assets")
-    if not assets_dir.exists():
-        assets_dir.mkdir()
-    
-    # Download binaries
-    if not download_binaries(python_exe):
-        print("Failed to download binaries")
-        return 1
+    print(f"Platform: {platform.system()}")
     
     # Build application
     if not build_application():

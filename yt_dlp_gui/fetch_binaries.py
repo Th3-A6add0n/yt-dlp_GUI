@@ -1,19 +1,42 @@
 import os
 import sys
+import platform
 import requests
 import zipfile
+import tarfile
 import tempfile
 import shutil
 import subprocess
 import re
 from pathlib import Path
 
-# Define URLs for the binaries
-YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
-FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+# Detect the platform
+system = platform.system().lower()
+
+# Define URLs and file names based on platform
+if system == 'windows':
+    YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+    FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+    FFMPEG_BINARIES = ["ffmpeg.exe", "ffprobe.exe"]
+elif system == 'linux':
+    YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+    FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+    FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
+elif system == 'darwin':  # macOS
+    YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+    # Use evermeet.cx for macOS FFmpeg builds
+    FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/release"
+    FFPROBE_URL = "https://evermeet.cx/ffprobe/get/release"
+    FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
+else:
+    print(f"Unsupported platform: {system}")
+    sys.exit(1)
 
 # Define the assets directory
-ASSETS_DIR = Path(__file__).parent / "assets"
+ASSETS_DIR = Path(__file__).parent / "assets" / system
+
+# Define the root assets directory (for the icon)
+ROOT_ASSETS_DIR = Path(__file__).parent / "assets"
 
 def get_yt_dlp_version(executable_path):
     """Get the version of the installed yt-dlp executable."""
@@ -35,12 +58,20 @@ def get_ffmpeg_version(executable_path):
         first_line = result.stdout.split('\n')[0]
         print(f"FFmpeg version output: {first_line}")
         
-        # Try multiple patterns to extract version
+        # Try to extract the publication date from the version string
+        date_match = re.search(r'-(\d{8})\b', first_line)
+        if date_match:
+            date_str = date_match.group(1)
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            print(f"Extracted FFmpeg publication date: {formatted_date}")
+            return formatted_date
+        
+        # If date extraction fails, try to extract build number
         patterns = [
-            r'ffmpeg version (\d+\.\d+(?:\.\d+)?)',  # Standard version pattern
-            r'ffmpeg version n(\d+\.\d+(?:\.\d+)?)',  # Sometimes there's an 'n' prefix
-            r'version (\d+\.\d+(?:\.\d+)?)',         # Just the version part
-            r'N-(\d+)-g',                         # For nightly builds like "N-121001-gadc66f30ee"
+            r'ffmpeg version N-(\d+)-g',
+            r'ffmpeg version (\d+\.\d+(?:\.\d+)?)',
+            r'ffmpeg version n(\d+\.\d+(?:\.\d+)?)',
+            r'version (\d+\.\d+(?:\.\d+)?)',
         ]
         
         for pattern in patterns:
@@ -91,8 +122,8 @@ def get_latest_ffmpeg_version():
         
         # Try multiple patterns to extract version
         patterns = [
-            r'ffmpeg-(\d+\.\d+(?:\.\d+)?)',  # Standard pattern
-            r'-(\d+\.\d+(?:\.\d+)?)'          # Just the version part after a dash
+            r'ffmpeg-(\d+\.\d+(?:\.\d+)?)',
+            r'-(\d+\.\d+(?:\.\d+)?)'
         ]
         
         for pattern in patterns:
@@ -127,8 +158,8 @@ def download_file(url, destination):
         return False
 
 def download_yt_dlp():
-    """Download the latest yt-dlp.exe if needed."""
-    destination = ASSETS_DIR / "yt-dlp.exe"
+    """Download the latest yt-dlp if needed."""
+    destination = ASSETS_DIR / (YT_DLP_URL.split('/')[-1])
     
     # Check if file exists
     if destination.exists():
@@ -136,69 +167,95 @@ def download_yt_dlp():
         latest_version = get_latest_yt_dlp_version()
         
         if current_version and latest_version and current_version == latest_version:
-            print(f"yt-dlp.exe is up to date (version {current_version})")
+            print(f"yt-dlp is up to date (version {current_version})")
             return True
         else:
-            print(f"Updating yt-dlp.exe from {current_version} to {latest_version}")
+            print(f"Updating yt-dlp from {current_version} to {latest_version}")
     else:
-        print("yt-dlp.exe not found, downloading...")
+        print("yt-dlp not found, downloading...")
     
     return download_file(YT_DLP_URL, destination)
 
 def download_ffmpeg():
-    """Download and extract ffmpeg.exe and ffprobe.exe if needed."""
-    ffmpeg_path = ASSETS_DIR / "ffmpeg.exe"
-    ffprobe_path = ASSETS_DIR / "ffprobe.exe"
+    """Download and extract ffmpeg binaries if needed."""
+    ffmpeg_path = ASSETS_DIR / FFMPEG_BINARIES[0]
+    ffprobe_path = ASSETS_DIR / FFMPEG_BINARIES[1]
     
     # Check if both files exist
     if ffmpeg_path.exists() and ffprobe_path.exists():
         current_version = get_ffmpeg_version(ffmpeg_path)
         latest_version = get_latest_ffmpeg_version()
         
-        print(f"Current ffmpeg version: {current_version}")
-        print(f"Latest ffmpeg version: {latest_version}")
-        
-        # For FFmpeg-Builds, we'll always download the latest since version comparison is tricky
-        # with nightly builds and "latest" tags
         if current_version and latest_version and current_version == latest_version:
-            print(f"ffmpeg.exe and ffprobe.exe are up to date (version {current_version})")
+            print(f"ffmpeg and ffprobe are up to date (version {current_version})")
             return True
         else:
             print(f"Updating ffmpeg/ffprobe from {current_version} to {latest_version}")
     else:
-        print("ffmpeg.exe or ffprobe.exe not found, downloading...")
+        print("ffmpeg or ffprobe not found, downloading...")
     
-    # Create a temporary directory for the zip file
-    with tempfile.TemporaryDirectory() as temp_dir:
-        zip_path = Path(temp_dir) / "ffmpeg.zip"
-        
-        # Download the zip file
-        if not download_file(FFMPEG_URL, zip_path):
+    # Special handling for macOS
+    if system == 'darwin':
+        # Download ffmpeg
+        if not download_file(FFMPEG_URL, ffmpeg_path):
             return False
         
-        # Extract the zip file
+        # Download ffprobe
+        if not download_file(FFPROBE_URL, ffprobe_path):
+            return False
+        
+        # Set executable permissions
+        os.chmod(ffmpeg_path, 0o755)
+        os.chmod(ffprobe_path, 0o755)
+        
+        print("Downloaded ffmpeg and ffprobe")
+        return True
+    
+    # For Windows and Linux
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        
+        # Determine file extension based on platform
+        if system == 'windows':
+            archive_path = temp_path / "ffmpeg.zip"
+            archive_format = 'zip'
+        else:
+            archive_path = temp_path / "ffmpeg.tar.xz"
+            archive_format = 'tar'
+        
+        # Download the archive
+        if not download_file(FFMPEG_URL, archive_path):
+            return False
+        
+        # Extract the archive
         try:
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # Extract all files
-                zip_ref.extractall(temp_dir)
-                
-                # Find the bin directory
-                bin_dir = None
-                for root, dirs, files in os.walk(temp_dir):
-                    if "bin" in dirs:
-                        bin_dir = os.path.join(root, "bin")
-                        break
-                
-                if not bin_dir:
-                    print("Error: Could not find bin directory in the ffmpeg zip file.")
-                    return False
-                
-                # Copy ffmpeg.exe and ffprobe.exe to the assets directory
-                shutil.copy2(os.path.join(bin_dir, "ffmpeg.exe"), ASSETS_DIR)
-                shutil.copy2(os.path.join(bin_dir, "ffprobe.exe"), ASSETS_DIR)
-                
-                print("Downloaded and extracted ffmpeg.exe and ffprobe.exe")
-                return True
+            if archive_format == 'zip':
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+            else:
+                with tarfile.open(archive_path, 'r:xz') as tar_ref:
+                    tar_ref.extractall(temp_dir)
+            
+            # Find the bin directory
+            bin_dir = None
+            for root, dirs, files in os.walk(temp_dir):
+                if "bin" in dirs:
+                    bin_dir = os.path.join(root, "bin")
+                    break
+            
+            if not bin_dir:
+                print("Error: Could not find bin directory in the ffmpeg archive.")
+                return False
+            
+            # Copy ffmpeg and ffprobe to the assets directory
+            for binary in FFMPEG_BINARIES:
+                shutil.copy2(os.path.join(bin_dir, binary), ASSETS_DIR)
+                # Set executable permission for non-Windows
+                if system != 'windows':
+                    os.chmod(ASSETS_DIR / binary, 0o755)
+            
+            print("Downloaded and extracted ffmpeg and ffprobe")
+            return True
         except Exception as e:
             print(f"Error extracting ffmpeg: {e}")
             return False
@@ -206,17 +263,20 @@ def download_ffmpeg():
 def main():
     """Main function to download all required binaries."""
     try:
-        # Create the assets directory if it doesn't exist
-        ASSETS_DIR.mkdir(exist_ok=True)
+        # Create the root assets directory if it doesn't exist
+        ROOT_ASSETS_DIR.mkdir(exist_ok=True, parents=True)
+        
+        # Create the platform-specific assets directory if it doesn't exist
+        ASSETS_DIR.mkdir(exist_ok=True, parents=True)
         
         # Download yt-dlp
         if not download_yt_dlp():
-            print("Failed to download yt-dlp.exe")
+            print("Failed to download yt-dlp")
             return False
         
         # Download ffmpeg and ffprobe
         if not download_ffmpeg():
-            print("Failed to download ffmpeg.exe and/or ffprobe.exe")
+            print("Failed to download ffmpeg and/or ffprobe")
             return False
         
         print("All binaries downloaded successfully!")
