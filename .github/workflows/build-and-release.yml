@@ -100,6 +100,13 @@ jobs:
           echo "Forcing build for testing purposes"
           echo "has_updates=true" >> $env:GITHUB_OUTPUT
 
+      - name: Pull latest changes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git pull origin main --rebase
+
       - name: Push changes
         if: steps.check_updates.outputs.has_updates == 'true'
         run: git push
