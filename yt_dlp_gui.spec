@@ -69,9 +69,10 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        (os.path.join(assets_dir, yt_dlp_name), 'assets'),
-        (os.path.join(assets_dir, ffmpeg_name), 'assets'),
-        (os.path.join(assets_dir, ffprobe_name), 'assets'),
+        # Include the binaries in the correct folder structure
+        (os.path.join(assets_dir, yt_dlp_name), os.path.join('assets', platform_folder)),
+        (os.path.join(assets_dir, ffmpeg_name), os.path.join('assets', platform_folder)),
+        (os.path.join(assets_dir, ffprobe_name), os.path.join('assets', platform_folder)),
     ],
     hiddenimports=[],
     hookspath=[],
