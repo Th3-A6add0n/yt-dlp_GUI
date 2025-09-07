@@ -43,6 +43,8 @@ jobs:
         id: get_versions
         run: |
           python yt_dlp_gui/get_current_versions.py >> $GITHUB_OUTPUT
+          echo "Debug: yt_dlp_version=${{ steps.get_versions.outputs.yt_dlp_version }}"
+          echo "Debug: ffmpeg_version=${{ steps.get_versions.outputs.ffmpeg_version }}"
       
       - name: Check for updates
         id: check_updates
@@ -50,21 +52,28 @@ jobs:
           # Create a versions file if it doesn't exist
           if [ ! -f versions.json ]; then
             echo '{"yt-dlp": "unknown", "ffmpeg": "unknown"}' > versions.json
+            echo "Created new versions.json file"
           fi
           
           # Read current versions
-          current_versions=$(cat versions.json)
+          current_yt_dlp=$(grep -o '"yt-dlp": *"[^"]*"' versions.json | cut -d'"' -f4)
+          current_ffmpeg=$(grep -o '"ffmpeg": *"[^"]*"' versions.json | cut -d'"' -f4)
           
           # Get new versions from the previous step
-          yt_dlp_version="${{ steps.get_versions.outputs.yt_dlp_version }}"
-          ffmpeg_version="${{ steps.get_versions.outputs.ffmpeg_version }}"
+          new_yt_dlp="${{ steps.get_versions.outputs.yt_dlp_version }}"
+          new_ffmpeg="${{ steps.get_versions.outputs.ffmpeg_version }}"
+          
+          echo "Debug: Current yt-dlp: $current_yt_dlp"
+          echo "Debug: Current ffmpeg: $current_ffmpeg"
+          echo "Debug: New yt-dlp: $new_yt_dlp"
+          echo "Debug: New ffmpeg: $new_ffmpeg"
           
           # Check if versions have changed
-          if [ "$current_versions" != "{\"yt-dlp\": \"$yt_dlp_version\", \"ffmpeg\": \"$ffmpeg_version\"}" ]; then
+          if [ "$current_yt_dlp" != "$new_yt_dlp" ] || [ "$current_ffmpeg" != "$new_ffmpeg" ]; then
             echo "Updates found. Updating versions file."
             
             # Update the versions file
-            echo "{\"yt-dlp\": \"$yt_dlp_version\", \"ffmpeg\": \"$ffmpeg_version\"}" > versions.json
+            echo "{\"yt-dlp\": \"$new_yt_dlp\", \"ffmpeg\": \"$new_ffmpeg\"}" > versions.json
             
             # Commit the updated versions file
             git config --local user.email "action@github.com"
@@ -83,7 +92,7 @@ jobs:
     needs: check-updates
     if: needs.check-updates.outputs.has_updates == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60  # Moved to job level
+    timeout-minutes: 60
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
