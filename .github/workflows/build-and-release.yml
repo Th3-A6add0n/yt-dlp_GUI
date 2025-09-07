@@ -138,9 +138,8 @@ jobs:
           # Extract GitHub CLI to the temporary directory
           Expand-Archive -Path "gh-cli-temp/gh.zip" -DestinationPath "gh-cli-temp" -Force
           
-          # Add GitHub CLI to PATH using Environment Files
-          $ghPath = "$env:GITHUB_WORKSPACE\gh-cli-temp\bin"
-          Add-Content -Path $env:GITHUB_PATH -Value $ghPath
+          # Set the GitHub CLI path as an environment variable for subsequent steps
+          echo "GITHUB_CLI_PATH=$env:GITHUB_WORKSPACE\gh-cli-temp\bin" >> $env:GITHUB_ENV
           
           # Clean up
           Remove-Item "gh-cli-temp/gh.zip" -Force
@@ -161,8 +160,9 @@ jobs:
           This release includes the latest versions of yt-dlp and ffmpeg.
           "@
           
-          # Create release
-          gh release create $tagName --title "$releaseTitle" --notes "$releaseNotes" "dist/yt-dlp GUI.exe"
+          # Create release using the full path to gh.exe
+          $ghPath = "$env:GITHUB_CLI_PATH\gh.exe"
+          & $ghPath release create $tagName --title "$releaseTitle" --notes "$releaseNotes" "dist/yt-dlp GUI.exe"
           
           echo "Release created successfully."
           echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/$tagName"
