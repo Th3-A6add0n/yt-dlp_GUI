@@ -12,6 +12,8 @@ from pathlib import Path
 
 # Detect the platform
 system = platform.system().lower()
+# Also detect the architecture
+architecture = platform.machine().lower()
 
 # Define URLs and file names based on platform
 if system == 'windows':
@@ -24,9 +26,17 @@ elif system == 'linux':
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 elif system == 'darwin':  # macOS
     YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
-    # Use the correct URLs for macOS FFmpeg builds from evermeet.cx
-    FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
-    FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
+    
+    # Use different URLs based on architecture
+    if architecture == 'arm64':
+        # For ARM64 Macs, use Homebrew's precompiled binaries
+        FFMPEG_URL = "https://github.com/eugeneware/ffmpeg-static/releases/download/b4.4.1/ffmpeg-darwin-arm64.tar.gz"
+        FFPROBE_URL = "https://github.com/eugeneware/ffmpeg-static/releases/download/b4.4.1/ffprobe-darwin-arm64.tar.gz"
+    else:
+        # For Intel Macs, use the evermeet.cx URLs
+        FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
+        FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
+    
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 else:
     print(f"Unsupported platform: {system}")
@@ -225,20 +235,54 @@ def download_ffmpeg():
     
     # Special handling for macOS
     if system == 'darwin':
-        # Download ffmpeg
-        if not download_file(FFMPEG_URL, ffmpeg_path):
-            return False
-        
-        # Download ffprobe
-        if not download_file(FFPROBE_URL, ffprobe_path):
-            return False
-        
-        # Set executable permissions
-        ffmpeg_path.chmod(0o755)
-        ffprobe_path.chmod(0o755)
-        
-        print("Downloaded ffmpeg and ffprobe")
-        return True
+        # For macOS ARM64, download and extract tar.gz files
+        if architecture == 'arm64':
+            # Create a temporary directory for extraction
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Download ffmpeg
+                ffmpeg_tar = temp_path / "ffmpeg.tar.gz"
+                if not download_file(FFMPEG_URL, ffmpeg_tar):
+                    return False
+                
+                # Download ffprobe
+                ffprobe_tar = temp_path / "ffprobe.tar.gz"
+                if not download_file(FFPROBE_URL, ffprobe_tar):
+                    return False
+                
+                # Extract ffmpeg
+                with tarfile.open(ffmpeg_tar, 'r:gz') as tar:
+                    tar.extractall(temp_dir)
+                
+                # Extract ffprobe
+                with tarfile.open(ffprobe_tar, 'r:gz') as tar:
+                    tar.extractall(temp_dir)
+                
+                # Copy binaries to assets directory
+                shutil.copy2(temp_path / "ffmpeg", ASSETS_DIR)
+                shutil.copy2(temp_path / "ffprobe", ASSETS_DIR)
+                
+                # Set executable permissions
+                (ASSETS_DIR / "ffmpeg").chmod(0o755)
+                (ASSETS_DIR / "ffprobe").chmod(0o755)
+                
+                print("Downloaded and extracted ffmpeg and ffprobe")
+                return True
+        else:
+            # For Intel Macs, download directly from evermeet.cx
+            if not download_file(FFMPEG_URL, ffmpeg_path):
+                return False
+            
+            if not download_file(FFPROBE_URL, ffprobe_path):
+                return False
+            
+            # Set executable permissions
+            ffmpeg_path.chmod(0o755)
+            ffprobe_path.chmod(0o755)
+            
+            print("Downloaded ffmpeg and ffprobe")
+            return True
     
     # For Windows and Linux
     with tempfile.TemporaryDirectory() as temp_dir:

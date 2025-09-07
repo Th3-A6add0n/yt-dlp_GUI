@@ -113,7 +113,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install PyQt5 PyInstaller requests
         timeout-minutes: 15
-        continue-on-error: true
       
       - name: Install dependencies (macOS/Linux)
         if: matrix.os != 'windows-latest'
@@ -125,14 +124,20 @@ jobs:
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
         timeout-minutes: 15
-        continue-on-error: true
       
       - name: Build application
         run: python build.py
         timeout-minutes: 60
+      
+      - name: List dist directory (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "Contents of dist directory:"
+          Get-ChildItem -Path "dist" | Format-Table Name, Length
         continue-on-error: true
       
-      - name: List dist directory
+      - name: List dist directory (macOS/Linux)
+        if: matrix.os != 'windows-latest'
         run: |
           echo "Contents of dist directory:"
           ls -la dist/
@@ -169,7 +174,6 @@ jobs:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI.exe
           retention-days: 30
-        continue-on-error: true
       
       - name: Upload artifact (macOS/Linux)
         if: matrix.os != 'windows-latest' && steps.verify_executable.outputs.executable_exists == 'true'
@@ -178,7 +182,6 @@ jobs:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI
           retention-days: 30
-        continue-on-error: true
 
   release:
     needs: [check-updates, build]
