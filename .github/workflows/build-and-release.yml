@@ -238,21 +238,6 @@ jobs:
             ls -la dist/
           fi
         continue-on-error: true
-      - name: Verify application bundle exists (Linux)
-        id: verify_app_bundle_linux
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          if [ -d "dist/yt-dlp GUI" ]; then
-            echo "Application bundle found."
-            echo "app_bundle_exists=true" >> $GITHUB_OUTPUT
-            echo "app_size=$(du -sh "dist/yt-dlp GUI" | cut -f1)" >> $GITHUB_OUTPUT
-          else
-            echo "Application bundle not found."
-            echo "app_bundle_exists=false" >> $GITHUB_OUTPUT
-            echo "Contents of dist directory:"
-            ls -la dist/
-          fi
-        continue-on-error: true
       - name: Verify DMG exists (macOS)
         id: verify_dmg_macos
         if: matrix.os == 'macos-latest'
@@ -264,6 +249,21 @@ jobs:
           else
             echo "DMG not found."
             echo "dmg_exists=false" >> $GITHUB_OUTPUT
+            echo "Contents of dist directory:"
+            ls -la dist/
+          fi
+        continue-on-error: true
+      - name: Verify application bundle exists (Linux)
+        id: verify_app_bundle_linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -d "dist/yt-dlp GUI" ]; then
+            echo "Application bundle found."
+            echo "app_bundle_exists=true" >> $GITHUB_OUTPUT
+            echo "app_size=$(du -sh "dist/yt-dlp GUI" | cut -f1)" >> $GITHUB_OUTPUT
+          else
+            echo "Application bundle not found."
+            echo "app_bundle_exists=false" >> $GITHUB_OUTPUT
             echo "Contents of dist directory:"
             ls -la dist/
           fi
@@ -297,12 +297,19 @@ jobs:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI.dmg
           retention-days: 30
-      - name: Upload artifact (Linux)
+      - name: Upload artifact (Linux) - AppImage
         if: matrix.os == 'ubuntu-latest' && steps.verify_appimage_linux.outputs.appimage_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI.AppImage
+          retention-days: 30
+      - name: Upload artifact (Linux) - App Bundle (Fallback)
+        if: matrix.os == 'ubuntu-latest' && steps.verify_appimage_linux.outputs.appimage_exists != 'true' && steps.verify_app_bundle_linux.outputs.app_bundle_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-${{ matrix.os }}
+          path: dist/yt-dlp GUI
           retention-days: 30
 
   release:
