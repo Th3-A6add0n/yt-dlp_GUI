@@ -330,6 +330,24 @@ def create_linux_appimage(dist_dir, app_name):
     appdir_path = dist_dir / f"{app_name}.AppDir"
     
     try:
+        # Check if FUSE is available
+        try:
+            result = subprocess.run(["ldconfig", "-p"], check=True, capture_output=True, text=True)
+            if "libfuse.so.2" not in result.stdout:
+                print("Warning: FUSE library not found. Trying to install it...")
+                # Try to install FUSE
+                try:
+                    subprocess.run(["sudo", "apt-get", "update"], check=True, capture_output=True)
+                    subprocess.run(["sudo", "apt-get", "install", "-y", "fuse", "libfuse2"], check=True, capture_output=True)
+                    print("FUSE library installed successfully.")
+                except subprocess.CalledProcessError as e:
+                    print(f"Failed to install FUSE library: {e}")
+                    print("Skipping AppImage creation.")
+                    return False
+        except subprocess.CalledProcessError as e:
+            print(f"Could not check for FUSE library: {e}")
+            print("Attempting to continue with AppImage creation anyway...")
+        
         # Create the AppDir structure
         appdir_usr_bin = appdir_path / "usr" / "bin"
         appdir_usr_lib = appdir_path / "usr" / "lib"
@@ -412,13 +430,31 @@ Terminal=false
             run_command(["wget", "-O", str(appimagetool_path), appimagetool_url])
             appimagetool_path.chmod(0o755)
         
-        # Create the AppImage
-        run_command([
-            str(appimagetool_path), 
-            "--no-appstream",
-            str(appdir_path), 
-            str(appimage_path)
-        ])
+        # Try to create the AppImage
+        try:
+            # First try with --no-appstream
+            run_command([
+                str(appimagetool_path), 
+                "--no-appstream",
+                str(appdir_path), 
+                str(appimage_path)
+            ])
+        except subprocess.CalledProcessError:
+            print("First attempt failed, trying without --no-appstream...")
+            try:
+                # Try without --no-appstream
+                run_command([
+                    str(appimagetool_path), 
+                    str(appdir_path), 
+                    str(appimage_path)
+                ])
+            except subprocess.CalledProcessError as e:
+                print(f"Error creating AppImage: {e}")
+                print("This might be due to FUSE not being available.")
+                # Clean up
+                if appdir_path.exists():
+                    shutil.rmtree(appdir_path)
+                return False
         
         # Clean up
         if appdir_path.exists():
@@ -484,9 +520,10 @@ def build_application():
             print("Failed to create Linux application bundle")
             return False
         
+        # Try to create AppImage, but don't fail the entire build if it fails
         if not create_linux_appimage(dist_dir, app_name):
-            print("Failed to create Linux AppImage")
-            return False
+            print("Failed to create Linux AppImage, but continuing with build")
+            # Don't return False here, as the application bundle was created successfully
     
     # For Windows, no special handling needed
     elif system == 'windows':
