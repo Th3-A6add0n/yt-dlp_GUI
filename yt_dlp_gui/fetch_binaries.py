@@ -31,12 +31,26 @@ elif system == 'linux':
     FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 elif system == 'darwin':  # macOS
-    # For macOS, use the universal binary from yt-dlp
-    YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+    # Detect the architecture
+    architecture = platform.machine().lower()
     
-    # For macOS, use the evermeet.cx URLs (they have universal binaries)
-    FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
-    FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
+    # Set URLs based on architecture
+    if architecture == 'arm64':
+        # For arm64 macOS, use the universal binary from yt-dlp
+        YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+        
+        # For arm64 macOS, we need to use a different source for ffmpeg
+        # Let's try using the static builds from johnvansickle.com
+        FFMPEG_URL = "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz"
+        FFPROBE_URL = None  # We'll extract ffprobe from the same archive
+    else:  # x86_64
+        # For Intel macOS, use the universal binary from yt-dlp
+        YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+        
+        # For Intel macOS, use the evermeet.cx URLs
+        FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
+        FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
+    
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 else:
     print(f"Unsupported platform: {system}")
@@ -253,22 +267,65 @@ def download_ffmpeg():
     
     # Special handling for macOS
     if system == 'darwin':
-        # Download ffmpeg
-        if not download_file(FFMPEG_URL, ffmpeg_path):
-            return False
+        # Detect the architecture
+        architecture = platform.machine().lower()
         
-        # Download ffprobe
-        if not download_file(FFPROBE_URL, ffprobe_path):
-            return False
-        
-        # Set executable permissions
-        ffmpeg_path.chmod(0o755)
-        ffprobe_path.chmod(0o755)
-        
-        print("Downloaded ffmpeg and ffprobe")
-        return True
+        if architecture == 'arm64':
+            # For arm64 macOS, download and extract the tar.xz archive
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                archive_path = temp_path / "ffmpeg.tar.xz"
+                
+                # Download the archive
+                if not download_file(FFMPEG_URL, archive_path):
+                    return False
+                
+                # Extract the archive
+                try:
+                    with tarfile.open(archive_path, 'r:xz') as tar_ref:
+                        tar_ref.extractall(temp_dir)
+                    
+                    # Find the ffmpeg and ffprobe binaries
+                    ffmpeg_found = False
+                    ffprobe_found = False
+                    
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            if file == "ffmpeg" and not ffmpeg_found:
+                                shutil.copy2(os.path.join(root, file), ASSETS_DIR)
+                                os.chmod(ASSETS_DIR / "ffmpeg", 0o755)
+                                ffmpeg_found = True
+                            elif file == "ffprobe" and not ffprobe_found:
+                                shutil.copy2(os.path.join(root, file), ASSETS_DIR)
+                                os.chmod(ASSETS_DIR / "ffprobe", 0o755)
+                                ffprobe_found = True
+                    
+                    if not ffmpeg_found or not ffprobe_found:
+                        print("Error: Could not find ffmpeg and/or ffprobe in the archive.")
+                        return False
+                    
+                    print("Downloaded and extracted ffmpeg and ffprobe")
+                    return True
+                except Exception as e:
+                    print(f"Error extracting ffmpeg: {e}")
+                    return False
+        else:
+            # For Intel macOS, download the individual binaries
+            if not download_file(FFMPEG_URL, ffmpeg_path):
+                return False
+            
+            if FFPROBE_URL and not download_file(FFPROBE_URL, ffprobe_path):
+                return False
+            
+            # Set executable permissions
+            ffmpeg_path.chmod(0o755)
+            if FFPROBE_URL:
+                ffprobe_path.chmod(0o755)
+            
+            print("Downloaded ffmpeg and ffprobe")
+            return True
     
-    # For Windows and Linux
+    # For Windows and Linux (existing code)
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         

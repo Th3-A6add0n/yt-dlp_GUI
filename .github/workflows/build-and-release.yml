@@ -133,8 +133,44 @@ jobs:
         run: python build.py
         timeout-minutes: 60
 
-      - name: Check PyInstaller output
-        if: always()
+      - name: Check PyInstaller output (Windows)
+        if: matrix.os == 'windows-latest' && always()
+        run: |
+          echo "=== Checking build directory ==="
+          if (Test-Path "build") {
+            echo "Build directory exists:"
+            Get-ChildItem -Path "build" -Recurse | Select-Object -First 20
+          } else {
+            echo "Build directory does not exist"
+          }
+
+          echo ""
+          echo "=== Checking dist directory ==="
+          if (Test-Path "dist") {
+            echo "Dist directory exists:"
+            Get-ChildItem -Path "dist" | Format-Table
+            if (Get-ChildItem -Path "dist" | Where-Object { -not $_.PsIsContainer }) {
+              echo "Files in dist directory:"
+              Get-ChildItem -Path "dist" -File | ForEach-Object { 
+                echo "File: $($_.Name)"
+              }
+            } else {
+              echo "Dist directory is empty"
+            }
+          } else {
+            echo "Dist directory does not exist"
+          }
+
+          echo ""
+          echo "=== Checking for PyInstaller warnings/errors ==="
+          if (Test-Path "build\warn-*.txt") {
+            echo "PyInstaller warnings:"
+            Get-Content "build\warn-*.txt"
+          }
+        continue-on-error: true
+
+      - name: Check PyInstaller output (macOS/Linux)
+        if: matrix.os != 'windows-latest' && always()
         run: |
           echo "=== Checking build directory ==="
           if [ -d "build" ]; then
@@ -207,7 +243,12 @@ jobs:
           if [ -f "dist/yt-dlp GUI" ]; then
             echo "Executable found."
             echo "executable_exists=true" >> $GITHUB_OUTPUT
-            echo "file_size=$(stat -c%s "dist/yt-dlp GUI")" >> $GITHUB_OUTPUT
+            # Use different stat command for macOS and Linux
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              echo "file_size=$(stat -f%z "dist/yt-dlp GUI")" >> $GITHUB_OUTPUT
+            else
+              echo "file_size=$(stat -c%s "dist/yt-dlp GUI")" >> $GITHUB_OUTPUT
+            fi
             echo "File details:"
             ls -la "dist/yt-dlp GUI"
             file "dist/yt-dlp GUI"
