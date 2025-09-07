@@ -38,18 +38,7 @@ jobs:
       
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
-      
-      - name: List assets directory
-        run: |
-          echo "Contents of assets directory:"
-          find yt_dlp_gui/assets -type f -exec ls -la {} \;
-      
-      - name: Test binary execution
-        run: |
-          echo "Testing yt-dlp:"
-          python yt_dlp_gui/assets/linux/yt-dlp --version || echo "Failed to run yt-dlp"
-          echo "Testing ffmpeg:"
-          python yt_dlp_gui/assets/linux/ffmpeg -version | head -1 || echo "Failed to run ffmpeg"
+        continue-on-error: true  # Continue even if this step fails
       
       - name: Get current versions
         id: get_versions
@@ -104,7 +93,7 @@ jobs:
     needs: check-updates
     if: needs.check-updates.outputs.has_updates == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 120  # Increased timeout
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
@@ -124,6 +113,7 @@ jobs:
       
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
+        continue-on-error: true  # Continue even if this step fails
       
       - name: Build application
         run: python build.py

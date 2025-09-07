@@ -24,9 +24,9 @@ elif system == 'linux':
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 elif system == 'darwin':  # macOS
     YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
-    # Use evermeet.cx for macOS FFmpeg builds
-    FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/release"
-    FFPROBE_URL = "https://evermeet.cx/ffprobe/get/release"
+    # Use the correct URLs for macOS FFmpeg builds from evermeet.cx
+    FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
+    FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 else:
     print(f"Unsupported platform: {system}")
@@ -143,7 +143,7 @@ def download_file(url, destination):
     """Download a file from a URL and save it to the destination."""
     print(f"Downloading {url}...")
     try:
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, timeout=60)  # Added timeout
         response.raise_for_status()
         
         # Write the file in chunks
