@@ -39,16 +39,16 @@ elif system == 'darwin':  # macOS
         # For arm64 macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For arm64 macOS, use the static builds from the official ffmpeg website
-        FFMPEG_URL = "https://github.com/FFmpeg/FFmpeg/releases/download/n6.0/ffmpeg-n6.0-latest-macos64-arm64.zip"
+        # For arm64 macOS, use Martin Riedl's builds
+        FFMPEG_URL = "https://ffmpeg.martin-riedl.de/file/ffmpeg/ffmpeg-release-arm64-static.zip"
         FFPROBE_URL = None  # ffprobe is included in the same archive
     else:  # x86_64
         # For Intel macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For Intel macOS, use the evermeet.cx URLs
-        FFMPEG_URL = "https://evermeet.cx/ffmpeg/get/ffmpeg"
-        FFPROBE_URL = "https://evermeet.cx/ffmpeg/get/ffprobe"
+        # For Intel macOS, use Martin Riedl's builds
+        FFMPEG_URL = "https://ffmpeg.martin-riedl.de/file/ffmpeg/ffmpeg-release-x86_64-static.zip"
+        FFPROBE_URL = None  # ffprobe is included in the same archive
     
     FFMPEG_BINARIES = ["ffmpeg", "ffprobe"]
 else:
@@ -359,20 +359,48 @@ def download_ffmpeg():
                     print(f"Error extracting ffmpeg: {e}")
                     return False
         else:
-            # For Intel macOS, download the individual binaries directly
-            if not download_file(FFMPEG_URL, ffmpeg_path):
-                return False
-            
-            if FFPROBE_URL and not download_file(FFPROBE_URL, ffprobe_path):
-                return False
-            
-            # Set executable permissions
-            ffmpeg_path.chmod(0o755)
-            if FFPROBE_URL:
-                ffprobe_path.chmod(0o755)
-            
-            print("Downloaded ffmpeg and ffprobe")
-            return True
+            # For Intel macOS, download and extract the ZIP archive
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Download the ZIP archive
+                archive_path = temp_path / "ffmpeg.zip"
+                if not download_file(FFMPEG_URL, archive_path):
+                    return False
+                
+                # Extract the ZIP archive
+                try:
+                    with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                        zip_ref.extractall(temp_dir)
+                    
+                    # Find the ffmpeg and ffprobe binaries
+                    ffmpeg_found = False
+                    ffprobe_found = False
+                    
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            if file == "ffmpeg" and not ffmpeg_found:
+                                source_path = os.path.join(root, file)
+                                shutil.copy2(source_path, ffmpeg_path)
+                                ffmpeg_path.chmod(0o755)
+                                ffmpeg_found = True
+                                print(f"Copied ffmpeg to {ffmpeg_path}")
+                            elif file == "ffprobe" and not ffprobe_found:
+                                source_path = os.path.join(root, file)
+                                shutil.copy2(source_path, ffprobe_path)
+                                ffprobe_path.chmod(0o755)
+                                ffprobe_found = True
+                                print(f"Copied ffprobe to {ffprobe_path}")
+                    
+                    if not ffmpeg_found:
+                        print("Error: Could not find ffmpeg in the archive.")
+                        return False
+                    
+                    print("Downloaded and extracted ffmpeg")
+                    return True
+                except Exception as e:
+                    print(f"Error extracting ffmpeg: {e}")
+                    return False
     
     # For Windows and Linux (existing code)
     with tempfile.TemporaryDirectory() as temp_dir:
