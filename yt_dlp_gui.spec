@@ -39,10 +39,26 @@ else:
     icon_extension = '.png'
 
 # Define the icon path from the root assets folder
-icon_path = os.path.join(root_assets_dir, f'icon{icon_extension}')
+# For macOS, we need to check if icon.icns exists, if not, we'll use icon.png and convert it
+if system == 'darwin':
+    icon_icns_path = os.path.join(root_assets_dir, 'icon.icns')
+    icon_png_path = os.path.join(root_assets_dir, 'icon.png')
+    
+    if os.path.exists(icon_icns_path):
+        icon_path = icon_icns_path
+    elif os.path.exists(icon_png_path):
+        # We'll convert the PNG to ICNS during the build process
+        icon_path = icon_png_path
+        print(f"Note: Using icon.png, will convert to ICNS during build")
+    else:
+        print(f"Warning: No icon file found in {root_assets_dir}")
+        icon_path = None
+else:
+    # For Windows and Linux, use the appropriate icon extension
+    icon_path = os.path.join(root_assets_dir, f'icon{icon_extension}')
 
 # Check if icon file exists
-if not os.path.exists(icon_path):
+if icon_path and not os.path.exists(icon_path):
     print(f"Warning: Icon file {icon_path} not found. Building without icon.")
     icon_path = None
 
@@ -125,6 +141,45 @@ exe = EXE(
     entitlements_file=None,
     icon=icon_path,  # This will be None if icon doesn't exist
 )
+
+# For macOS, if we used a PNG icon, we need to convert it to ICNS
+if system == 'darwin' and icon_path and icon_path.endswith('.png'):
+    import subprocess
+    import tempfile
+    
+    try:
+        # Create a temporary directory for conversion
+        with tempfile.TemporaryDirectory() as temp_dir:
+            iconset_dir = os.path.join(temp_dir, 'icon.iconset')
+            os.makedirs(iconset_dir)
+            
+            # Convert PNG to different sizes for the iconset
+            sizes = [
+                (16, 'icon_16x16.png'),
+                (32, 'icon_16x16@2x.png'),
+                (32, 'icon_32x32.png'),
+                (64, 'icon_32x32@2x.png'),
+                (128, 'icon_128x128.png'),
+                (256, 'icon_128x128@2x.png'),
+                (256, 'icon_256x256.png'),
+                (512, 'icon_256x256@2x.png'),
+                (512, 'icon_512x512.png'),
+                (1024, 'icon_512x512@2x.png')
+            ]
+            
+            for size, filename in sizes:
+                output_path = os.path.join(iconset_dir, filename)
+                subprocess.run(['sips', '-z', str(size), str(size), icon_path, '--out', output_path], 
+                              check=True, capture_output=True)
+            
+            # Convert iconset to ICNS
+            icns_path = os.path.join(root_assets_dir, 'icon.icns')
+            subprocess.run(['iconutil', '-c', 'icns', iconset_dir, '-o', icns_path], 
+                          check=True, capture_output=True)
+            
+            print(f"Successfully converted PNG to ICNS: {icns_path}")
+    except Exception as e:
+        print(f"Warning: Failed to convert PNG to ICNS: {e}")
 
 # Clean up build directories
 build_dir = os.path.join(current_dir, 'build')

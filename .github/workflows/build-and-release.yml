@@ -1,4 +1,5 @@
 name: Build and Release yt-dlp GUI
+
 on:
   schedule:
     # Run every Monday at 6:00 UTC
@@ -7,8 +8,10 @@ on:
   push:
     branches:
       - testing
+
 permissions:
   contents: write
+
 jobs:
   check-updates:
     runs-on: ubuntu-latest
@@ -74,6 +77,7 @@ jobs:
             echo "No updates found."
             echo "has_updates=false" >> $GITHUB_OUTPUT
           fi
+
   build:
     needs: check-updates
     # For testing purposes, always run the build on the testing branch
@@ -94,7 +98,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-cursor0 libxcb-cursor0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev
+          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev
         continue-on-error: true
       - name: Install dependencies (Windows)
         if: matrix.os == 'windows-latest'

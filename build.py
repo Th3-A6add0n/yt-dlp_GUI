@@ -6,22 +6,33 @@ import platform
 import plistlib
 from pathlib import Path
 
-def run_command(cmd, check=True, cwd=None):
+def run_command(cmd, check=True, cwd=None, timeout=None):
     """Run a command and optionally check its return code."""
     print(f"Running: {' '.join(cmd)}")
     if cwd:
         print(f"Working directory: {cwd}")
-    result = subprocess.run(cmd, check=False, text=True, capture_output=True, cwd=cwd)
-    print(f"Return code: {result.returncode}")
-    if result.stdout:
-        print("STDOUT:")
-        print(result.stdout)
-    if result.stderr:
-        print("STDERR:")
-        print(result.stderr)
-    if check and result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
-    return result
+    
+    # Set a longer timeout for PyInstaller on Windows
+    if timeout is None and len(cmd) > 0 and "pyinstaller" in cmd[0].lower():
+        timeout = 3600  # 1 hour timeout for PyInstaller
+    
+    try:
+        result = subprocess.run(cmd, check=False, text=True, capture_output=True, cwd=cwd, timeout=timeout)
+        print(f"Return code: {result.returncode}")
+        if result.stdout:
+            print("STDOUT:")
+            print(result.stdout)
+        if result.stderr:
+            print("STDERR:")
+            print(result.stderr)
+        if check and result.returncode != 0:
+            raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+        return result
+    except subprocess.TimeoutExpired:
+        print(f"Command timed out after {timeout} seconds")
+        if check:
+            raise
+        return None
 
 def create_macos_app_bundle(dist_dir, app_name):
     """Create a macOS application bundle."""
@@ -146,18 +157,26 @@ def create_linux_app_bundle(dist_dir, app_name):
     lib_dir = app_dir / "lib"
     plugins_dir = app_dir / "plugins"
     
+    # Check if the executable already exists
+    executable_path = dist_dir / app_name
+    if executable_path.exists():
+        print(f"Found existing executable at {executable_path}")
+        # Rename the executable to avoid conflicts
+        backup_path = dist_dir / f"{app_name}.bin"
+        shutil.move(str(executable_path), str(backup_path))
+        print(f"Moved executable to {backup_path}")
+    
     # Create directories
     bin_dir.mkdir(parents=True, exist_ok=True)
     lib_dir.mkdir(parents=True, exist_ok=True)
     plugins_dir.mkdir(parents=True, exist_ok=True)
     
-    # Move the executable to the bin directory
-    executable_path = dist_dir / app_name
-    if executable_path.exists():
-        shutil.move(str(executable_path), str(bin_dir / app_name))
+    # Move the backup executable to the bin directory
+    if backup_path.exists():
+        shutil.move(str(backup_path), str(bin_dir / app_name))
         print(f"Moved executable to {bin_dir / app_name}")
     else:
-        print(f"Error: Executable not found at {executable_path}")
+        print(f"Error: Executable not found at {backup_path}")
         return False
     
     # Copy Qt plugins if they exist

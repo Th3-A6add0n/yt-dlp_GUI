@@ -39,8 +39,7 @@ elif system == 'darwin':  # macOS
         # For arm64 macOS, use the universal binary from yt-dlp
         YT_DLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
         
-        # For arm64 macOS, we need to use a different source for ffmpeg
-        # Let's try using the static builds from johnvansickle.com
+        # For arm64 macOS, use the static builds from johnvansickle.com
         FFMPEG_URL = "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz"
         FFPROBE_URL = None  # We'll extract ffprobe from the same archive
     else:  # x86_64
@@ -96,6 +95,19 @@ def get_ffmpeg_version(executable_path):
         if not sys.platform.startswith('win'):
             executable_path.chmod(0o755)
         
+        # For macOS ARM64, check if the binary is compatible before running
+        if system == 'darwin' and architecture == 'arm64':
+            # Check file format to ensure it's ARM64
+            try:
+                file_check = subprocess.run(['file', str(executable_path)], 
+                                          capture_output=True, text=True, check=True)
+                if 'ARM64' not in file_check.stdout and 'arm64' not in file_check.stdout:
+                    print(f"Warning: ffmpeg binary is not ARM64 compatible: {file_check.stdout}")
+                    return "incompatible"
+            except subprocess.CalledProcessError as e:
+                print(f"Error checking file format: {e}")
+                return "error"
+        
         # Run the command
         result = subprocess.run([str(executable_path), "-version"], 
                               capture_output=True, text=True, check=True)
@@ -129,6 +141,9 @@ def get_ffmpeg_version(executable_path):
         return None
     except subprocess.CalledProcessError as e:
         print(f"Error running ffmpeg: {e}")
+        # For macOS ARM64, provide a more specific error message
+        if system == 'darwin' and architecture == 'arm64' and "Exec format error" in str(e):
+            print("This is likely due to an incompatible binary architecture. ARM64 binaries are required for Apple Silicon Macs.")
         return None
     except FileNotFoundError:
         print(f"FFmpeg executable not found at {executable_path}")
@@ -257,7 +272,16 @@ def download_ffmpeg():
             print(f"Rate limit exceeded, assuming ffmpeg is up to date (version {current_version})")
             return True
         
-        if current_version and latest_version and current_version == latest_version:
+        # For macOS ARM64, if the binary is incompatible, force redownload
+        if system == 'darwin' and architecture == 'arm64' and current_version == "incompatible":
+            print("Found incompatible ffmpeg binary. Redownloading...")
+            # Remove the existing files
+            if ffmpeg_path.exists():
+                ffmpeg_path.unlink()
+            if ffprobe_path.exists():
+                ffprobe_path.unlink()
+            # Continue with download
+        elif current_version and latest_version and current_version == latest_version:
             print(f"ffmpeg and ffprobe are up to date (version {current_version})")
             return True
         else:
@@ -292,16 +316,41 @@ def download_ffmpeg():
                     for root, dirs, files in os.walk(temp_dir):
                         for file in files:
                             if file == "ffmpeg" and not ffmpeg_found:
-                                shutil.copy2(os.path.join(root, file), ASSETS_DIR)
-                                os.chmod(ASSETS_DIR / "ffmpeg", 0o755)
+                                source_path = os.path.join(root, file)
+                                dest_path = ASSETS_DIR / "ffmpeg"
+                                shutil.copy2(source_path, dest_path)
+                                os.chmod(dest_path, 0o755)
                                 ffmpeg_found = True
+                                print(f"Copied ffmpeg to {dest_path}")
                             elif file == "ffprobe" and not ffprobe_found:
-                                shutil.copy2(os.path.join(root, file), ASSETS_DIR)
-                                os.chmod(ASSETS_DIR / "ffprobe", 0o755)
+                                source_path = os.path.join(root, file)
+                                dest_path = ASSETS_DIR / "ffprobe"
+                                shutil.copy2(source_path, dest_path)
+                                os.chmod(dest_path, 0o755)
                                 ffprobe_found = True
+                                print(f"Copied ffprobe to {dest_path}")
                     
                     if not ffmpeg_found or not ffprobe_found:
                         print("Error: Could not find ffmpeg and/or ffprobe in the archive.")
+                        return False
+                    
+                    # Verify the binaries are ARM64 compatible
+                    try:
+                        ffmpeg_check = subprocess.run(['file', str(ASSETS_DIR / "ffmpeg")], 
+                                                     capture_output=True, text=True, check=True)
+                        if 'ARM64' not in ffmpeg_check.stdout and 'arm64' not in ffmpeg_check.stdout:
+                            print(f"Warning: Downloaded ffmpeg binary is not ARM64 compatible: {ffmpeg_check.stdout}")
+                            return False
+                            
+                        ffprobe_check = subprocess.run(['file', str(ASSETS_DIR / "ffprobe")], 
+                                                     capture_output=True, text=True, check=True)
+                        if 'ARM64' not in ffprobe_check.stdout and 'arm64' not in ffprobe_check.stdout:
+                            print(f"Warning: Downloaded ffprobe binary is not ARM64 compatible: {ffprobe_check.stdout}")
+                            return False
+                            
+                        print("Verified ARM64 compatibility for both binaries")
+                    except subprocess.CalledProcessError as e:
+                        print(f"Error verifying binary compatibility: {e}")
                         return False
                     
                     print("Downloaded and extracted ffmpeg and ffprobe")
