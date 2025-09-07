@@ -33,23 +33,14 @@ jobs:
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
 
-      - name: Get versions and save to file
-        run: |
-          python yt_dlp_gui/get_versions.py > versions_output.txt
-          echo "Versions output:"
-          cat versions_output.txt
-
-      - name: Extract versions from file
+      - name: Get versions
         id: get_versions
+        run: python yt_dlp_gui/get_versions.py
+
+      - name: Debug versions output
         run: |
-          $ytDlpVersion = Select-String -Path "versions_output.txt" -Pattern "yt_dlp_version=" | ForEach-Object { $_.Line.Split("=")[1] }
-          $ffmpegVersion = Select-String -Path "versions_output.txt" -Pattern "ffmpeg_version=" | ForEach-Object { $_.Line.Split("=")[1] }
-          
-          echo "yt_dlp_version=$ytDlpVersion" >> $env:GITHUB_OUTPUT
-          echo "ffmpeg_version=$ffmpegVersion" >> $env:GITHUB_OUTPUT
-          
-          echo "Extracted yt-dlp version: $ytDlpVersion"
-          echo "Extracted ffmpeg version: $ffmpegVersion"
+          echo "yt_dlp_version: ${{ steps.get_versions.outputs.yt_dlp_version }}"
+          echo "ffmpeg_version: ${{ steps.get_versions.outputs.ffmpeg_version }}"
 
       - name: Check for updates
         id: check_updates
@@ -151,11 +142,21 @@ jobs:
       - name: Install GitHub CLI
         if: steps.check_updates.outputs.has_updates == 'true'
         run: |
-          # Install GitHub CLI
+          # Create a temporary directory for GitHub CLI
+          New-Item -ItemType Directory -Path "gh-cli-temp" -Force | Out-Null
+          
+          # Download GitHub CLI
           $url = "https://github.com/cli/cli/releases/download/v2.40.1/gh_2.40.1_windows_amd64.zip"
-          Invoke-WebRequest -Uri $url -OutFile gh.zip
-          Expand-Archive -Path gh.zip -DestinationPath .
-          echo "::add-path::$env:GITHUB_WORKSPACE"
+          Invoke-WebRequest -Uri $url -OutFile "gh-cli-temp/gh.zip"
+          
+          # Extract GitHub CLI to the temporary directory
+          Expand-Archive -Path "gh-cli-temp/gh.zip" -DestinationPath "gh-cli-temp" -Force
+          
+          # Add GitHub CLI to PATH
+          echo "::add-path::$env:GITHUB_WORKSPACE\gh-cli-temp\bin"
+          
+          # Clean up
+          Remove-Item "gh-cli-temp/gh.zip" -Force
 
       - name: Create Release with GitHub CLI
         if: steps.check_updates.outputs.has_updates == 'true'

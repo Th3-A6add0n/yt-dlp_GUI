@@ -1,6 +1,13 @@
-import subprocess
 import os
+import sys
+import subprocess
+import re
 from pathlib import Path
+
+# Paths to the binaries
+assets_dir = Path("assets")
+yt_dlp_path = assets_dir / "yt-dlp.exe"
+ffmpeg_path = assets_dir / "ffmpeg.exe"
 
 def get_version(command, args):
     try:
@@ -9,11 +16,6 @@ def get_version(command, args):
     except:
         return "unknown"
 
-# Paths to the binaries
-assets_dir = Path("assets")
-yt_dlp_path = assets_dir / "yt-dlp.exe"
-ffmpeg_path = assets_dir / "ffmpeg.exe"
-
 # Get versions
 yt_dlp_version = get_version(str(yt_dlp_path), ["--version"])
 ffmpeg_version = get_version(str(ffmpeg_path), ["-version"])
@@ -21,7 +23,6 @@ ffmpeg_version = get_version(str(ffmpeg_path), ["-version"])
 # Extract the version string for ffmpeg (first line)
 ffmpeg_version = ffmpeg_version.split('\n')[0]
 
-# Output to GitHub Actions step output
-with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
-    print(f"yt_dlp_version={yt_dlp_version}", file=fh)
-    print(f"ffmpeg_version={ffmpeg_version}", file=fh)
+# Output in a structured format
+print(f"yt_dlp_version={yt_dlp_version}")
+print(f"ffmpeg_version={ffmpeg_version}")
