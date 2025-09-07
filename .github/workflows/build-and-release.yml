@@ -1,0 +1,82 @@
+name: Build and Release yt-dlp GUI
+
+on:
+  schedule:
+    # Run every Monday at 6:00 UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt5 PyInstaller requests
+
+      - name: Run fetch_binaries.py
+        run: python yt_dlp_gui/fetch_binaries.py
+
+      - name: Get versions
+        id: get_versions
+        run: python yt_dlp_gui/get_versions.py
+
+      - name: Check for updates
+        id: check_updates
+        run: |
+          # We'll check if there are any changes in the assets directory
+          git add yt_dlp_gui/assets/
+          if git diff --staged --quiet; then
+            echo "No updates found."
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+          else
+            echo "Updates found."
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build application
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: python build.py
+
+      - name: Commit updated binaries
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git commit -m "Update binaries [skip ci]" -a
+
+      - name: Push changes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: git push
+
+      - name: Get current date
+        id: date
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: steps.check_updates.outputs.has_updates == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.date.outputs.date }}.${{ github.run_number }}
+          name: Release ${{ steps.date.outputs.date }}.${{ github.run_number }}
+          body: |
+            Automated release of yt-dlp GUI with updated binaries.
+            
+            yt-dlp version: ${{ steps.get_versions.outputs.yt_dlp_version }}
+            FFmpeg version: ${{ steps.get_versions.outputs.ffmpeg_version }}
+            
+            This release includes the latest versions of yt-dlp and ffmpeg.
+          files: |
+            dist/yt-dlp GUI.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
