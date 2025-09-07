@@ -5,6 +5,9 @@ import shutil
 import platform
 import plistlib
 import signal
+import stat
+import tarfile
+import tempfile
 from pathlib import Path
 
 def run_command(cmd, check=True, cwd=None, timeout=None):
@@ -171,6 +174,44 @@ def create_macos_app_bundle(dist_dir, app_name):
     print(f"Successfully created macOS application bundle at {app_bundle}")
     return True
 
+def create_macos_dmg(dist_dir, app_name):
+    """Create a DMG file for the macOS application."""
+    print("Creating macOS DMG...")
+    
+    app_bundle = dist_dir / f"{app_name}.app"
+    dmg_path = dist_dir / f"{app_name}.dmg"
+    temp_dmg_path = dist_dir / "temp.dmg"
+    
+    try:
+        # Create a temporary DMG
+        dmg_size = 50  # Size in MB
+        run_command([
+            "hdiutil", "create", "-srcfolder", str(app_bundle), 
+            "-volname", app_name, "-vfs", "APFS", "-fs", "HFS+", 
+            "-fsargs", "-c c=64,a=16,e=16", 
+            "-format", "UDZO", str(temp_dmg_path)
+        ])
+        
+        # Create the final DMG with a license agreement and background
+        run_command([
+            "hdiutil", "convert", str(temp_dmg_path), 
+            "-format", "UDZO", "-imagekey", "zlib-level=9", 
+            "-o", str(dmg_path)
+        ])
+        
+        # Clean up temporary files
+        if temp_dmg_path.exists():
+            temp_dmg_path.unlink()
+        
+        print(f"Successfully created DMG at {dmg_path}")
+        return True
+    except Exception as e:
+        print(f"Error creating DMG: {e}")
+        # Clean up temporary files
+        if temp_dmg_path.exists():
+            temp_dmg_path.unlink()
+        return False
+
 def create_linux_app_bundle(dist_dir, app_name):
     """Create a Linux application bundle."""
     print("Creating Linux application bundle...")
@@ -281,6 +322,118 @@ Categories=AudioVideo;Video;Network;
     print(f"Successfully created Linux application bundle at {app_dir}")
     return True
 
+def create_linux_appimage(dist_dir, app_name):
+    """Create an AppImage for the Linux application."""
+    print("Creating Linux AppImage...")
+    
+    app_dir = dist_dir / f"{app_name}"
+    appimage_path = dist_dir / f"{app_name}.AppImage"
+    appdir_path = dist_dir / f"{app_name}.AppDir"
+    
+    try:
+        # Create the AppDir structure
+        appdir_usr_bin = appdir_path / "usr" / "bin"
+        appdir_usr_lib = appdir_path / "usr" / "lib"
+        appdir_usr_share = appdir_path / "usr" / "share"
+        appdir_usr_share_applications = appdir_usr_share / "applications"
+        appdir_usr_share_icons = appdir_usr_share / "icons"
+        appdir_usr_share_icons_hicolor = appdir_usr_share_icons / "hicolor"
+        appdir_usr_share_icons_hicolor_256x256 = appdir_usr_share_icons_hicolor / "256x256"
+        appdir_usr_share_icons_hicolor_256x256_apps = appdir_usr_share_icons_hicolor_256x256 / "apps"
+        
+        # Create directories
+        appdir_usr_bin.mkdir(parents=True, exist_ok=True)
+        appdir_usr_lib.mkdir(parents=True, exist_ok=True)
+        appdir_usr_share_applications.mkdir(parents=True, exist_ok=True)
+        appdir_usr_share_icons_hicolor_256x256_apps.mkdir(parents=True, exist_ok=True)
+        
+        # Copy the application files
+        if app_dir.exists():
+            # Copy executable
+            app_executable = app_dir / "bin" / app_name
+            if app_executable.exists():
+                shutil.copy(str(app_executable), str(appdir_usr_bin / app_name))
+                print(f"Copied executable to {appdir_usr_bin / app_name}")
+            
+            # Copy libraries
+            app_lib = app_dir / "lib"
+            if app_lib.exists():
+                for lib_file in app_lib.glob("*"):
+                    shutil.copy(str(lib_file), str(appdir_usr_lib))
+                    print(f"Copied library {lib_file.name} to {appdir_usr_lib}")
+            
+            # Copy desktop file
+            desktop_file = app_dir / f"{app_name}.desktop"
+            if desktop_file.exists():
+                shutil.copy(str(desktop_file), str(appdir_usr_share_applications))
+                print(f"Copied desktop file to {appdir_usr_share_applications}")
+            
+            # Copy icon
+            icon_file = app_dir / "icon.png"
+            if icon_file.exists():
+                shutil.copy(str(icon_file), str(appdir_usr_share_icons_hicolor_256x256_apps / f"{app_name}.png"))
+                print(f"Copied icon to {appdir_usr_share_icons_hicolor_256x256_apps}")
+        
+        # Create the AppRun script
+        apprun_path = appdir_path / "AppRun"
+        with open(apprun_path, 'w') as f:
+            f.write('#!/bin/bash\n')
+            f.write('# Set the app directory\n')
+            f.write('APPDIR="$(dirname "$(readlink -f "$0")")"\n\n')
+            f.write('# Set library path\n')
+            f.write('export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"\n\n')
+            f.write('# Set Qt plugin path\n')
+            f.write('export QT_PLUGIN_PATH="$APPDIR/usr/lib/plugins"\n')
+            f.write('export QT_QPA_PLATFORM_PLUGIN_PATH="$APPDIR/usr/lib/plugins/platforms"\n\n')
+            f.write('# Run the application\n')
+            f.write('exec "$APPDIR/usr/bin/{}" "$@"\n'.format(app_name))
+        
+        # Make AppRun executable
+        apprun_path.chmod(0o755)
+        
+        # Create the .desktop file for AppImage
+        desktop_path = appdir_path / f"{app_name}.desktop"
+        with open(desktop_path, 'w') as f:
+            f.write(f"""[Desktop Entry]
+Name={app_name}
+Exec={app_name}
+Icon={app_name}
+Type=Application
+Categories=AudioVideo;Video;Network;
+Comment=Download videos from YouTube and other sites
+Terminal=false
+""")
+        
+        # Download appimagetool if not available
+        appimagetool_url = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+        appimagetool_path = dist_dir / "appimagetool"
+        
+        if not appimagetool_path.exists():
+            print("Downloading appimagetool...")
+            run_command(["wget", "-O", str(appimagetool_path), appimagetool_url])
+            appimagetool_path.chmod(0o755)
+        
+        # Create the AppImage
+        run_command([
+            str(appimagetool_path), 
+            "--no-appstream",
+            str(appdir_path), 
+            str(appimage_path)
+        ])
+        
+        # Clean up
+        if appdir_path.exists():
+            shutil.rmtree(appdir_path)
+        
+        print(f"Successfully created AppImage at {appimage_path}")
+        return True
+    except Exception as e:
+        print(f"Error creating AppImage: {e}")
+        # Clean up
+        if appdir_path.exists():
+            shutil.rmtree(appdir_path)
+        return False
+
 def build_application():
     """Build the application using PyInstaller."""
     print("Building the application...")
@@ -314,18 +467,26 @@ def build_application():
     # Get the distribution directory
     dist_dir = script_dir / "dist"
     
-    # For macOS, create an application bundle
+    # For macOS, create an application bundle and DMG
     if system == 'darwin':
         app_name = "yt-dlp GUI"
         if not create_macos_app_bundle(dist_dir, app_name):
             print("Failed to create macOS application bundle")
             return False
+        
+        if not create_macos_dmg(dist_dir, app_name):
+            print("Failed to create macOS DMG")
+            return False
     
-    # For Linux, create an application bundle
+    # For Linux, create an application bundle and AppImage
     elif system == 'linux':
         app_name = "yt-dlp GUI"
         if not create_linux_app_bundle(dist_dir, app_name):
             print("Failed to create Linux application bundle")
+            return False
+        
+        if not create_linux_appimage(dist_dir, app_name):
+            print("Failed to create Linux AppImage")
             return False
     
     # For Windows, no special handling needed
