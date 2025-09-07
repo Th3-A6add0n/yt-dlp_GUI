@@ -1,5 +1,4 @@
 name: Build and Release yt-dlp GUI
-
 on:
   schedule:
     # Run every Monday at 6:00 UTC
@@ -8,10 +7,8 @@ on:
   push:
     branches:
       - testing
-
 permissions:
   contents: write
-
 jobs:
   check-updates:
     runs-on: ubuntu-latest
@@ -25,36 +22,24 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      - name: Install Qt dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-cursor0 libxcb-cursor0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev
-        continue-on-error: true    
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install PyQt5 PyInstaller requests
         timeout-minutes: 15
         continue-on-error: true
-
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
         timeout-minutes: 15
         continue-on-error: true
-
       - name: Get current versions
         id: get_versions
         run: |
           python yt_dlp_gui/get_current_versions.py >> $GITHUB_OUTPUT
-
       - name: Check for updates
         id: check_updates
         run: |
@@ -63,40 +48,32 @@ jobs:
             echo '{"yt-dlp": "unknown", "ffmpeg": "unknown"}' > versions.json
             echo "Created new versions.json file"
           fi
-
           # Read current versions
           current_yt_dlp=$(grep -o '"yt-dlp": *"[^"]*"' versions.json | cut -d'"' -f4)
           current_ffmpeg=$(grep -o '"ffmpeg": *"[^"]*"' versions.json | cut -d'"' -f4)
-
           # Get new versions from the previous step
           new_yt_dlp="${{ steps.get_versions.outputs.yt_dlp_version }}"
           new_ffmpeg="${{ steps.get_versions.outputs.ffmpeg_version }}"
-
           echo "Debug: Current yt-dlp: $current_yt_dlp"
           echo "Debug: Current ffmpeg: $current_ffmpeg"
           echo "Debug: New yt-dlp: $new_yt_dlp"
           echo "Debug: New ffmpeg: $new_ffmpeg"
-
           # Check if versions have changed
           if [ "$current_yt_dlp" != "$new_yt_dlp" ] || [ "$current_ffmpeg" != "$new_ffmpeg" ]; then
             echo "Updates found. Updating versions file."
-
             # Update the versions file
             echo "{\"yt-dlp\": \"$new_yt_dlp\", \"ffmpeg\": \"$new_ffmpeg\"}" > versions.json
-
             # Commit the updated versions file
             git config --local user.email "action@github.com"
             git config --local user.name "GitHub Action"
             git add versions.json
             git commit -m "Update version information [skip ci]"
             git push
-
             echo "has_updates=true" >> $GITHUB_OUTPUT
           else
             echo "No updates found."
             echo "has_updates=false" >> $GITHUB_OUTPUT
           fi
-
   build:
     needs: check-updates
     # For testing purposes, always run the build on the testing branch
@@ -109,12 +86,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
+      - name: Install Qt dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-cursor0 libxcb-cursor0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev
+        continue-on-error: true
       - name: Install dependencies (Windows)
         if: matrix.os == 'windows-latest'
         run: |
@@ -122,7 +103,6 @@ jobs:
           pip install PyQt5 PyInstaller requests
         timeout-minutes: 20
         continue-on-error: true
-
       - name: Install dependencies (macOS/Linux)
         if: matrix.os != 'windows-latest'
         run: |
@@ -130,16 +110,13 @@ jobs:
           pip install PyQt5 PyInstaller requests
         timeout-minutes: 20
         continue-on-error: true
-
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
         timeout-minutes: 20
         continue-on-error: true
-
       - name: Build application
         run: python build.py
         timeout-minutes: 60
-
       - name: Check PyInstaller output (Windows)
         if: matrix.os == 'windows-latest' && always()
         run: |
@@ -150,7 +127,6 @@ jobs:
           } else {
             echo "Build directory does not exist"
           }
-
           echo ""
           echo "=== Checking dist directory ==="
           if (Test-Path "dist") {
@@ -167,7 +143,6 @@ jobs:
           } else {
             echo "Dist directory does not exist"
           }
-
           echo ""
           echo "=== Checking for PyInstaller warnings/errors ==="
           if (Test-Path "build\warn-*.txt") {
@@ -175,7 +150,6 @@ jobs:
             Get-Content "build\warn-*.txt"
           }
         continue-on-error: true
-
       - name: Check PyInstaller output (macOS/Linux)
         if: matrix.os != 'windows-latest' && always()
         run: |
@@ -186,7 +160,6 @@ jobs:
           else
             echo "Build directory does not exist"
           fi
-
           echo ""
           echo "=== Checking dist directory ==="
           if [ -d "dist" ]; then
@@ -201,7 +174,6 @@ jobs:
           else
             echo "Dist directory does not exist"
           fi
-
           echo ""
           echo "=== Checking for PyInstaller warnings/errors ==="
           if [ -f "build/warn-*.txt" ]; then
@@ -209,21 +181,18 @@ jobs:
             cat build/warn-*.txt
           fi
         continue-on-error: true
-
       - name: List dist directory (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           echo "Contents of dist directory:"
           Get-ChildItem -Path "dist" | Format-Table Name, Length
         continue-on-error: true
-
       - name: List dist directory (macOS/Linux)
         if: matrix.os != 'windows-latest'
         run: |
           echo "Contents of dist directory:"
           ls -la dist/
         continue-on-error: true
-
       - name: Verify executable exists (Windows)
         id: verify_executable_windows
         if: matrix.os == 'windows-latest'
@@ -242,32 +211,36 @@ jobs:
             Get-ChildItem -Path "dist" -Recurse | Format-Table Name, Length, Mode
           }
         continue-on-error: true
-
-      - name: Verify executable exists (macOS/Linux)
-        id: verify_executable_unix
-        if: matrix.os != 'windows-latest'
+      - name: Verify application bundle exists (macOS)
+        id: verify_app_bundle_macos
+        if: matrix.os == 'macos-latest'
         run: |
-          if [ -f "dist/yt-dlp GUI" ]; then
-            echo "Executable found."
-            echo "executable_exists=true" >> $GITHUB_OUTPUT
-            # Use different stat command for macOS and Linux
-            if [ "$RUNNER_OS" = "macOS" ]; then
-              echo "file_size=$(stat -f%z "dist/yt-dlp GUI")" >> $GITHUB_OUTPUT
-            else
-              echo "file_size=$(stat -c%s "dist/yt-dlp GUI")" >> $GITHUB_OUTPUT
-            fi
-            echo "File details:"
-            ls -la "dist/yt-dlp GUI"
-            file "dist/yt-dlp GUI"
+          if [ -d "dist/yt-dlp GUI.app" ]; then
+            echo "Application bundle found."
+            echo "app_bundle_exists=true" >> $GITHUB_OUTPUT
+            echo "app_size=$(du -sh "dist/yt-dlp GUI.app" | cut -f1)" >> $GITHUB_OUTPUT
           else
-            echo "Executable not found."
-            echo "executable_exists=false" >> $GITHUB_OUTPUT
+            echo "Application bundle not found."
+            echo "app_bundle_exists=false" >> $GITHUB_OUTPUT
             echo "Contents of dist directory:"
             ls -la dist/
-            find dist/ -type f -exec file {} \;
           fi
         continue-on-error: true
-
+      - name: Verify application bundle exists (Linux)
+        id: verify_app_bundle_linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -d "dist/yt-dlp GUI" ]; then
+            echo "Application bundle found."
+            echo "app_bundle_exists=true" >> $GITHUB_OUTPUT
+            echo "app_size=$(du -sh "dist/yt-dlp GUI" | cut -f1)" >> $GITHUB_OUTPUT
+          else
+            echo "Application bundle not found."
+            echo "app_bundle_exists=false" >> $GITHUB_OUTPUT
+            echo "Contents of dist directory:"
+            ls -la dist/
+          fi
+        continue-on-error: true
       - name: Upload artifact (Windows)
         if: matrix.os == 'windows-latest' && steps.verify_executable_windows.outputs.executable_exists == 'true' && steps.verify_executable_windows.outputs.file_size > 0
         uses: actions/upload-artifact@v4
@@ -275,9 +248,15 @@ jobs:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI.exe
           retention-days: 30
-
-      - name: Upload artifact (macOS/Linux)
-        if: matrix.os != 'windows-latest' && steps.verify_executable_unix.outputs.executable_exists == 'true' && steps.verify_executable_unix.outputs.file_size > 0
+      - name: Upload artifact (macOS)
+        if: matrix.os == 'macos-latest' && steps.verify_app_bundle_macos.outputs.app_bundle_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-${{ matrix.os }}
+          path: dist/yt-dlp GUI.app
+          retention-days: 30
+      - name: Upload artifact (Linux)
+        if: matrix.os == 'ubuntu-latest' && steps.verify_app_bundle_linux.outputs.app_bundle_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}

@@ -3,6 +3,7 @@ import sys
 import subprocess
 import shutil
 import platform
+import plistlib
 from pathlib import Path
 
 def run_command(cmd, check=True, cwd=None):
@@ -21,6 +22,218 @@ def run_command(cmd, check=True, cwd=None):
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
     return result
+
+def create_macos_app_bundle(dist_dir, app_name):
+    """Create a macOS application bundle."""
+    print("Creating macOS application bundle...")
+    
+    # Create the .app directory structure
+    app_bundle = dist_dir / f"{app_name}.app"
+    contents_dir = app_bundle / "Contents"
+    macos_dir = contents_dir / "MacOS"
+    resources_dir = contents_dir / "Resources"
+    
+    # Create directories
+    macos_dir.mkdir(parents=True, exist_ok=True)
+    resources_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Move the executable to the MacOS directory
+    executable_path = dist_dir / app_name
+    if executable_path.exists():
+        shutil.move(str(executable_path), str(macos_dir / app_name))
+        print(f"Moved executable to {macos_dir / app_name}")
+    else:
+        print(f"Error: Executable not found at {executable_path}")
+        return False
+    
+    # Create Info.plist
+    info_plist = {
+        'CFBundleExecutable': app_name,
+        'CFBundleIdentifier': 'com.yt-dlp-gui.app',
+        'CFBundleName': app_name,
+        'CFBundleDisplayName': 'yt-dlp GUI',
+        'CFBundleVersion': '1.0',
+        'CFBundleShortVersionString': '1.0',
+        'CFBundlePackageType': 'APPL',
+        'CFBundleSignature': '????',
+        'LSMinimumSystemVersion': '10.12.0',
+        'NSHighResolutionCapable': True,
+        'NSRequiresAquaSystemAppearance': False,
+        'CFBundleDocumentTypes': [],
+        'UTExportedTypeDeclarations': []
+    }
+    
+    with open(contents_dir / "Info.plist", 'wb') as f:
+        plistlib.dump(info_plist, f)
+    
+    print(f"Created Info.plist at {contents_dir / 'Info.plist'}")
+    
+    # Copy the icon if it exists
+    icon_source = Path(__file__).parent / "yt_dlp_gui" / "assets" / "macos" / "icon.icns"
+    if icon_source.exists():
+        shutil.copy(str(icon_source), str(resources_dir / "icon.icns"))
+        print(f"Copied icon to {resources_dir / 'icon.icns'}")
+        
+        # Update Info.plist to include the icon
+        info_plist['CFBundleIconFile'] = 'icon.icns'
+        with open(contents_dir / "Info.plist", 'wb') as f:
+            plistlib.dump(info_plist, f)
+        print("Updated Info.plist with icon reference")
+    
+    # Create a plugins directory in Resources
+    plugins_dir = resources_dir / "plugins"
+    plugins_dir.mkdir(exist_ok=True)
+    
+    # Copy Qt plugins if they exist
+    qt_plugins_source = dist_dir / "platforms"
+    if qt_plugins_source.exists():
+        platforms_target = plugins_dir / "platforms"
+        platforms_target.mkdir(exist_ok=True)
+        for plugin in qt_plugins_source.glob("*"):
+            if plugin.is_file():
+                shutil.copy(str(plugin), str(platforms_target))
+        print(f"Copied Qt platform plugins to {platforms_target}")
+    
+    # Copy other Qt plugins if they exist
+    for plugin_dir in ["imageformats", "xcbglintegrations"]:
+        plugin_source = dist_dir / plugin_dir
+        if plugin_source.exists():
+            plugin_target = plugins_dir / plugin_dir
+            plugin_target.mkdir(exist_ok=True)
+            for plugin in plugin_source.glob("*"):
+                if plugin.is_file():
+                    shutil.copy(str(plugin), str(plugin_target))
+            print(f"Copied Qt {plugin_dir} plugins to {plugin_target}")
+    
+    # Create a wrapper script to set environment variables
+    wrapper_script = macos_dir / f"{app_name}_wrapper.sh"
+    with open(wrapper_script, 'w') as f:
+        f.write('#!/bin/bash\n')
+        f.write('# Set the path to the bundle\n')
+        f.write('BUNDLE_DIR="$(dirname "$0")"\n')
+        f.write('BUNDLE="$(dirname "$BUNDLE_DIR")"\n')
+        f.write('RESOURCES="$BUNDLE/Resources"\n\n')
+        f.write('# Set Qt plugin path\n')
+        f.write('export QT_PLUGIN_PATH="$RESOURCES/plugins"\n')
+        f.write('export QT_QPA_PLATFORM_PLUGIN_PATH="$RESOURCES/plugins/platforms"\n\n')
+        f.write('# Run the actual executable\n')
+        f.write('exec "$BUNDLE_DIR/{}" "$@"\n'.format(app_name))
+    
+    # Make the wrapper script executable
+    wrapper_script.chmod(0o755)
+    
+    # Rename the original executable and replace it with the wrapper
+    original_executable = macos_dir / app_name
+    backup_executable = macos_dir / f"{app_name}_bin"
+    shutil.move(str(original_executable), str(backup_executable))
+    shutil.move(str(wrapper_script), str(original_executable))
+    
+    print(f"Created wrapper script at {original_executable}")
+    
+    # Make the final executable executable
+    original_executable.chmod(0o755)
+    
+    print(f"Successfully created macOS application bundle at {app_bundle}")
+    return True
+
+def create_linux_app_bundle(dist_dir, app_name):
+    """Create a Linux application bundle."""
+    print("Creating Linux application bundle...")
+    
+    # Create the app directory structure
+    app_dir = dist_dir / f"{app_name}"
+    bin_dir = app_dir / "bin"
+    lib_dir = app_dir / "lib"
+    plugins_dir = app_dir / "plugins"
+    
+    # Create directories
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Move the executable to the bin directory
+    executable_path = dist_dir / app_name
+    if executable_path.exists():
+        shutil.move(str(executable_path), str(bin_dir / app_name))
+        print(f"Moved executable to {bin_dir / app_name}")
+    else:
+        print(f"Error: Executable not found at {executable_path}")
+        return False
+    
+    # Copy Qt plugins if they exist
+    qt_plugins_source = dist_dir / "platforms"
+    if qt_plugins_source.exists():
+        platforms_target = plugins_dir / "platforms"
+        platforms_target.mkdir(exist_ok=True)
+        for plugin in qt_plugins_source.glob("*"):
+            if plugin.is_file():
+                shutil.copy(str(plugin), str(platforms_target))
+        print(f"Copied Qt platform plugins to {platforms_target}")
+    
+    # Copy other Qt plugins if they exist
+    for plugin_dir in ["imageformats", "xcbglintegrations"]:
+        plugin_source = dist_dir / plugin_dir
+        if plugin_source.exists():
+            plugin_target = plugins_dir / plugin_dir
+            plugin_target.mkdir(exist_ok=True)
+            for plugin in plugin_source.glob("*"):
+                if plugin.is_file():
+                    shutil.copy(str(plugin), str(plugin_target))
+            print(f"Copied Qt {plugin_dir} plugins to {plugin_target}")
+    
+    # Copy library dependencies
+    # This is a simplified approach - in a real scenario, you might want to use ldd to find all dependencies
+    # For now, we'll just copy any .so files in the dist directory
+    for so_file in dist_dir.glob("*.so*"):
+        if so_file.is_file():
+            shutil.copy(str(so_file), str(lib_dir))
+            print(f"Copied library {so_file.name} to {lib_dir}")
+    
+    # Create a desktop entry file
+    desktop_entry = f"""[Desktop Entry]
+Version=1.0
+Type=Application
+Name={app_name}
+Comment=Download videos from YouTube and other sites
+Exec={app_dir}/bin/{app_name}
+Icon={app_dir}/icon.png
+Terminal=false
+Categories=AudioVideo;Video;Network;
+"""
+    
+    with open(app_dir / f"{app_name}.desktop", 'w') as f:
+        f.write(desktop_entry)
+    
+    print(f"Created desktop entry at {app_dir / f'{app_name}.desktop'}")
+    
+    # Copy the icon if it exists
+    icon_source = Path(__file__).parent / "yt_dlp_gui" / "assets" / "linux" / "icon.png"
+    if icon_source.exists():
+        shutil.copy(str(icon_source), str(app_dir / "icon.png"))
+        print(f"Copied icon to {app_dir / 'icon.png'}")
+    
+    # Create a launcher script
+    launcher_script = app_dir / f"run_{app_name}.sh"
+    with open(launcher_script, 'w') as f:
+        f.write('#!/bin/bash\n')
+        f.write(f'# Set the app directory\n')
+        f.write(f'APP_DIR="$(dirname "$0")"\n\n')
+        f.write(f'# Set library path\n')
+        f.write(f'export LD_LIBRARY_PATH="$APP_DIR/lib:$LD_LIBRARY_PATH"\n\n')
+        f.write(f'# Set Qt plugin path\n')
+        f.write(f'export QT_PLUGIN_PATH="$APP_DIR/plugins"\n')
+        f.write(f'export QT_QPA_PLATFORM_PLUGIN_PATH="$APP_DIR/plugins/platforms"\n\n')
+        f.write(f'# Run the application\n')
+        f.write(f'exec "$APP_DIR/bin/{app_name}" "$@"\n')
+    
+    # Make the launcher script executable
+    launcher_script.chmod(0o755)
+    
+    # Make the main executable executable
+    (bin_dir / app_name).chmod(0o755)
+    
+    print(f"Successfully created Linux application bundle at {app_dir}")
+    return True
 
 def build_application():
     """Build the application using PyInstaller."""
@@ -48,23 +261,28 @@ def build_application():
         print(f"Error: Spec file not found at {spec_file}")
         return False
     
-    # Rename the executable for non-Windows platforms
-    if system != 'windows':
-        dist_dir = script_dir / "dist"
-        executable_path = dist_dir / "yt-dlp GUI"
+    # Get the distribution directory
+    dist_dir = script_dir / "dist"
+    
+    # For macOS, create an application bundle
+    if system == 'darwin':
+        app_name = "yt-dlp GUI"
+        if not create_macos_app_bundle(dist_dir, app_name):
+            print("Failed to create macOS application bundle")
+            return False
+    
+    # For Linux, create an application bundle
+    elif system == 'linux':
+        app_name = "yt-dlp GUI"
+        if not create_linux_app_bundle(dist_dir, app_name):
+            print("Failed to create Linux application bundle")
+            return False
+    
+    # For Windows, no special handling needed
+    elif system == 'windows':
+        executable_path = dist_dir / "yt-dlp GUI.exe"
         if executable_path.exists():
-            print(f"Setting executable permission for {system}")
-            os.chmod(executable_path, 0o755)
-            
-            # For Linux, create a wrapper script that sets the Qt plugin path
-            if system == 'linux':
-                wrapper_path = dist_dir / "yt-dlp_GUI.sh"
-                with open(wrapper_path, 'w') as f:
-                    f.write("#!/bin/bash\n")
-                    f.write(f"export QT_QPA_PLATFORM_PLUGIN_PATH=\"$(dirname \"$0\")/platforms\"\n")
-                    f.write(f"export LD_LIBRARY_PATH=\"$(dirname \"$0\"):$LD_LIBRARY_PATH\"\n")
-                    f.write(f"exec \"$(dirname \"$0\")/yt-dlp GUI\" \"$@\"\n")
-                os.chmod(wrapper_path, 0o755)
+            print("Windows executable created successfully")
     
     return True
 
@@ -122,7 +340,7 @@ def main():
     print()
     print("===========================================")
     print("   Build completed successfully!")
-    print("   The executable is in the 'dist' folder.")
+    print("   The application bundle is in the 'dist' folder.")
     print("===========================================")
     
     return 0

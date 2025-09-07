@@ -31,7 +31,7 @@ elif system == 'darwin':
     yt_dlp_name = 'yt-dlp_macos'
     ffmpeg_name = 'ffmpeg'
     ffprobe_name = 'ffprobe'
-    icon_extension = '.png'
+    icon_extension = '.icns'  # macOS uses .icns for icons
 else:
     yt_dlp_name = 'yt-dlp'
     ffmpeg_name = 'ffmpeg'
@@ -74,13 +74,15 @@ qt_plugins_path = os.path.join(os.path.dirname(PyQt5.__file__), 'Qt5', 'plugins'
 
 if os.path.exists(qt_plugins_path):
     # Include platform plugins
-    a.datas += Tree(
-        os.path.join(qt_plugins_path, 'platforms'),
-        prefix='platforms',
-        excludes=[]
-    )
+    platforms_path = os.path.join(qt_plugins_path, 'platforms')
+    if os.path.exists(platforms_path):
+        a.datas += Tree(
+            platforms_path,
+            prefix='platforms',
+            excludes=[]
+        )
     
-    # Include image formats if needed
+    # Include image formats
     image_formats_path = os.path.join(qt_plugins_path, 'imageformats')
     if os.path.exists(image_formats_path):
         a.datas += Tree(
@@ -89,8 +91,8 @@ if os.path.exists(qt_plugins_path):
             excludes=[]
         )
     
-    # Include xcbglintegrations for Linux
-    if system == 'linux':
+    # For macOS and Linux, include xcbglintegrations
+    if system in ['darwin', 'linux']:
         xcbglintegrations_path = os.path.join(qt_plugins_path, 'xcbglintegrations')
         if os.path.exists(xcbglintegrations_path):
             a.datas += Tree(
