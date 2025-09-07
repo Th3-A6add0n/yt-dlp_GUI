@@ -85,6 +85,18 @@ jobs:
         if: steps.check_updates.outputs.has_updates == 'true'
         run: python build.py
 
+      - name: Verify executable exists
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          if (Test-Path "dist/yt-dlp GUI.exe") {
+            echo "Executable found."
+            echo "executable_exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "Executable not found."
+            echo "executable_exists=false" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+
       - name: Get current date
         id: date
         if: steps.check_updates.outputs.has_updates == 'true'
@@ -107,3 +119,10 @@ jobs:
             dist/yt-dlp GUI.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log release result
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          echo "Release step completed."
+          echo "has_updates: ${{ steps.check_updates.outputs.has_updates }}"
+          echo "executable_exists: ${{ steps.verify_executable.outputs.executable_exists }}"
