@@ -81,12 +81,13 @@ jobs:
 
   build:
     needs: check-updates
-    # For testing purposes, always run the build on the testing branch
-    # For main branch, only run if there are updates or it's a scheduled run
+    # Always run the build for testing branch
+    # For main branch, run if there are updates or it's a scheduled run
     if: |
       (github.ref == 'refs/heads/testing') ||
       (github.ref == 'refs/heads/main' && needs.check-updates.outputs.has_updates == 'true') ||
-      (github.event_name == 'schedule' && github.ref == 'refs/heads/main')
+      (github.event_name == 'schedule' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180 # Increased timeout to 3 hours
     strategy:
@@ -316,51 +317,3 @@ jobs:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI
           retention-days: 30
-
-  release:
-    needs: [check-updates, build]
-    # Only create releases if there are actual updates, not for testing
-    if: needs.check-updates.outputs.has_updates == 'true' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Get current date
-        id: date
-        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check-updates.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
-          name: Release ${{ needs.check-updates.outputs.yt_dlp_version }}.${{ needs.check-updates.outputs.ffmpeg_version }}.${{ steps.date.outputs.date }}
-          body: |
-            Automated release of yt-dlp GUI with updated binaries.
-
-            yt-dlp version: ${{ needs.check-updates.outputs.yt_dlp_version }}
-            FFmpeg version: ${{ needs.check-updates.outputs.ffmpeg_version }}
-
-            This release includes the latest versions of yt-dlp and ffmpeg.
-            
-            ## Installation
-            
-            ### Windows
-            Download and run `yt-dlp GUI.exe`
-            
-            ### macOS
-            Download and open `yt-dlp GUI.dmg`, then drag the application to your Applications folder
-            
-            ### Linux
-            Download `yt-dlp GUI.AppImage`, make it executable with `chmod +x yt-dlp GUI.AppImage`, then run it
-          files: |
-            artifacts/yt-dlp-gui-windows-latest/yt-dlp GUI.exe
-            artifacts/yt-dlp-gui-macos-latest/yt-dlp GUI.dmg
-            artifacts/yt-dlp-gui-ubuntu-latest/yt-dlp GUI.AppImage
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

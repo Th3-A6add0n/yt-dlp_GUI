@@ -10,7 +10,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-def run_command(cmd, check=True, cwd=None, timeout=None):
+def run_command(cmd, check=True, cwd=None, timeout=None, env=None):
     """Run a command and optionally check its return code."""
     print(f"Running: {' '.join(cmd)}")
     if cwd:
@@ -32,7 +32,7 @@ def run_command(cmd, check=True, cwd=None, timeout=None):
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         
-        result = subprocess.run(cmd, check=False, text=True, capture_output=True, cwd=cwd, timeout=timeout)
+        result = subprocess.run(cmd, check=False, text=True, capture_output=True, cwd=cwd, timeout=timeout, env=env)
         
         # Restore original signal handlers
         signal.signal(signal.SIGINT, original_sigint)
@@ -430,7 +430,15 @@ Terminal=false
             run_command(["wget", "-O", str(appimagetool_path), appimagetool_url])
             appimagetool_path.chmod(0o755)
         
-        # Try to create the AppImage with a workaround for FUSE
+        # Try to create the AppImage with environment variables for FUSE
+        env = os.environ.copy()
+        fuse_lib_path = "/usr/lib/x86_64-linux-gnu"
+        if "LD_LIBRARY_PATH" in env:
+            env["LD_LIBRARY_PATH"] = f"{fuse_lib_path}:{env['LD_LIBRARY_PATH']}"
+        else:
+            env["LD_LIBRARY_PATH"] = fuse_lib_path
+        
+        # Try to create the AppImage
         try:
             # First try with --no-appstream
             run_command([
@@ -438,7 +446,7 @@ Terminal=false
                 "--no-appstream",
                 str(appdir_path), 
                 str(appimage_path)
-            ])
+            ], env=env)
         except subprocess.CalledProcessError:
             print("First attempt failed, trying without --no-appstream...")
             try:
@@ -447,7 +455,7 @@ Terminal=false
                     str(appimagetool_path), 
                     str(appdir_path), 
                     str(appimage_path)
-                ])
+                ], env=env)
             except subprocess.CalledProcessError as e:
                 print(f"Error creating AppImage: {e}")
                 print("This might be due to FUSE not being available.")
