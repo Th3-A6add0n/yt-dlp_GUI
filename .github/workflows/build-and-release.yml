@@ -40,34 +40,50 @@ jobs:
       - name: Check for updates
         id: check_updates
         run: |
-          # Stage the assets directory
-          git add yt_dlp_gui/assets/
-          # Check if there are staged changes
-          git diff --staged --quiet
-          if ($LASTEXITCODE -ne 0) {
+          # Create a versions file if it doesn't exist
+          if (!(Test-Path versions.json)) {
+            echo '{"yt-dlp": "unknown", "ffmpeg": "unknown"}' | Out-File -FilePath versions.json
+          }
+          
+          # Read current versions
+          $currentVersions = Get-Content versions.json | ConvertFrom-Json
+          
+          # Get new versions
+          $newYtDlpVersion = "${{ steps.get_versions.outputs.yt_dlp_version }}"
+          $newFfmpegVersion = "${{ steps.get_versions.outputs.ffmpeg_version }}"
+          
+          # Check if versions have changed
+          $ytDlpUpdated = $currentVersions."yt-dlp" -ne $newYtDlpVersion
+          $ffmpegUpdated = $currentVersions.ffmpeg -ne $newFfmpegVersion
+          
+          if ($ytDlpUpdated -or $ffmpegUpdated) {
             echo "Updates found."
             echo "has_updates=true" >> $env:GITHUB_OUTPUT
+            
+            # Update the versions file
+            $updatedVersions = @{
+              "yt-dlp" = $newYtDlpVersion
+              "ffmpeg" = $newFfmpegVersion
+            }
+            $updatedVersions | ConvertTo-Json | Set-Content versions.json
+            
+            # Commit the updated versions file
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git add versions.json
+            git commit -m "Update version information [skip ci]"
           } else {
             echo "No updates found."
             echo "has_updates=false" >> $env:GITHUB_OUTPUT
           }
-          # Explicitly set exit code to 0 to avoid error
-          exit 0
-
-      - name: Build application
-        if: steps.check_updates.outputs.has_updates == 'true'
-        run: python build.py
-
-      - name: Commit updated binaries
-        if: steps.check_updates.outputs.has_updates == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git commit -m "Update binaries [skip ci]" -a
 
       - name: Push changes
         if: steps.check_updates.outputs.has_updates == 'true'
         run: git push
+
+      - name: Build application
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: python build.py
 
       - name: Get current date
         id: date
