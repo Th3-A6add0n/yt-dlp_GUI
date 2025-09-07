@@ -6,42 +6,37 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:  # Allows manual triggering
 
-# Grant write permissions to the workflow
 permissions:
   contents: write
 
 jobs:
   build-and-release:
     runs-on: windows-latest
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0  # Fetch full history for pushing changes
-
+          fetch-depth: 0
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
+      
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install PyQt5 PyInstaller requests
-
+      
       - name: Run fetch_binaries.py
         run: python yt_dlp_gui/fetch_binaries.py
-
-      - name: Get versions
+      
+      - name: Get current versions
         id: get_versions
-        run: python yt_dlp_gui/get_versions.py
-
-      - name: Debug versions output
-        run: |
-          echo "yt_dlp_version: ${{ steps.get_versions.outputs.yt_dlp_version }}"
-          echo "ffmpeg_version: ${{ steps.get_versions.outputs.ffmpeg_version }}"
-
+        run: python yt_dlp_gui/get_current_versions.py >> $env:GITHUB_OUTPUT
+      
       - name: Check for updates
         id: check_updates
         run: |
@@ -66,13 +61,14 @@ jobs:
           # Check if versions have changed
           $ytDlpUpdated = $currentVersions."yt-dlp" -ne $newYtDlpVersion
           $ffmpegUpdated = $currentVersions.ffmpeg -ne $newFfmpegVersion
+          $hasUpdates = $ytDlpUpdated -or $ffmpegUpdated
           
           echo "yt-dlp updated: $ytDlpUpdated"
           echo "ffmpeg updated: $ffmpegUpdated"
+          echo "has_updates=$hasUpdates" >> $env:GITHUB_OUTPUT
           
-          if ($ytDlpUpdated -or $ffmpegUpdated) {
-            echo "Updates found."
-            echo "has_updates=true" >> $env:GITHUB_OUTPUT
+          if ($hasUpdates) {
+            echo "Updates found. Updating versions file."
             
             # Update the versions file
             $updatedVersions = @{
@@ -88,33 +84,23 @@ jobs:
             git commit -m "Update version information [skip ci]"
           } else {
             echo "No updates found."
-            echo "has_updates=false" >> $env:GITHUB_OUTPUT
           }
-
-      - name: Debug check_updates output
-        run: |
-          echo "check_updates.has_updates: ${{ steps.check_updates.outputs.has_updates }}"
-
-      - name: Force build for testing
-        run: |
-          echo "Forcing build for testing purposes"
-          echo "has_updates=true" >> $env:GITHUB_OUTPUT
-
+      
       - name: Pull latest changes
         if: steps.check_updates.outputs.has_updates == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git pull origin main --rebase
-
+      
       - name: Push changes
         if: steps.check_updates.outputs.has_updates == 'true'
         run: git push
-
+      
       - name: Build application
         if: steps.check_updates.outputs.has_updates == 'true'
         run: python build.py
-
+      
       - name: Verify executable exists
         id: verify_executable
         if: steps.check_updates.outputs.has_updates == 'true'
@@ -127,25 +113,18 @@ jobs:
             echo "executable_exists=false" >> $env:GITHUB_OUTPUT
             exit 1
           }
-
+      
       - name: List dist directory contents
         if: steps.check_updates.outputs.has_updates == 'true'
         run: |
           echo "Contents of dist directory:"
           Get-ChildItem -Path "dist" | Format-Table Name, Length
-
+      
       - name: Get current date
         id: date
         if: steps.check_updates.outputs.has_updates == 'true'
         run: echo "date=$(date +'%Y%m%d')" >> $env:GITHUB_OUTPUT
-
-      - name: Debug release info
-        if: steps.check_updates.outputs.has_updates == 'true'
-        run: |
-          echo "Date output: ${{ steps.date.outputs.date }}"
-          echo "Run number: ${{ github.run_number }}"
-          echo "Tag name: v${{ steps.date.outputs.date }}.${{ github.run_number }}"
-
+      
       - name: Install GitHub CLI
         if: steps.check_updates.outputs.has_updates == 'true'
         run: |
@@ -160,11 +139,12 @@ jobs:
           Expand-Archive -Path "gh-cli-temp/gh.zip" -DestinationPath "gh-cli-temp" -Force
           
           # Add GitHub CLI to PATH using Environment Files
-          echo "GITHUB_CLI_PATH=$env:GITHUB_WORKSPACE\gh-cli-temp\bin" >> $env:GITHUB_ENV
+          $ghPath = "$env:GITHUB_WORKSPACE\gh-cli-temp\bin"
+          Add-Content -Path $env:GITHUB_PATH -Value $ghPath
           
           # Clean up
           Remove-Item "gh-cli-temp/gh.zip" -Force
-
+      
       - name: Create Release with GitHub CLI
         if: steps.check_updates.outputs.has_updates == 'true'
         env:
@@ -186,10 +166,3 @@ jobs:
           
           echo "Release created successfully."
           echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/$tagName"
-
-      - name: Log release result
-        if: steps.check_updates.outputs.has_updates == 'true'
-        run: |
-          echo "Release step completed."
-          echo "has_updates: ${{ steps.check_updates.outputs.has_updates }}"
-          echo "executable_exists: ${{ steps.verify_executable.outputs.executable_exists }}"
