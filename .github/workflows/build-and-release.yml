@@ -1,5 +1,4 @@
 name: Build and Release yt-dlp GUI
-
 on:
   schedule:
     # Run every Monday at 6:00 UTC
@@ -7,11 +6,9 @@ on:
   workflow_dispatch:  # Allows manual triggering
   push:
     branches:
-      - testing  # Add your testing branch
-
+      - testing
 permissions:
   contents: write
-
 jobs:
   check-updates:
     runs-on: ubuntu-latest
@@ -89,7 +86,6 @@ jobs:
             echo "No updates found."
             echo "has_updates=false" >> $GITHUB_OUTPUT
           fi
-
   build:
     needs: check-updates
     # For testing purposes, always run the build on the testing branch
@@ -149,7 +145,7 @@ jobs:
         continue-on-error: true
       
       - name: Verify executable exists (Windows)
-        id: verify_executable
+        id: verify_executable_windows
         if: matrix.os == 'windows-latest'
         run: |
           if (Test-Path "dist/yt-dlp GUI.exe") {
@@ -162,12 +158,12 @@ jobs:
         continue-on-error: true
       
       - name: Verify executable exists (macOS/Linux)
-        id: verify_executable
+        id: verify_executable_unix
         if: matrix.os != 'windows-latest'
         run: |
           if [ -f "dist/yt-dlp GUI" ]; then
             echo "Executable found."
-            echo "executable_exists=true" >> $env:GITHUB_OUTPUT
+            echo "executable_exists=true" >> $GITHUB_OUTPUT
           else
             echo "Executable not found."
             echo "executable_exists=false" >> $env:GITHUB_OUTPUT
@@ -175,7 +171,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload artifact (Windows)
-        if: matrix.os == 'windows-latest' && steps.verify_executable.outputs.executable_exists == 'true'
+        if: matrix.os == 'windows-latest' && steps.verify_executable_windows.outputs.executable_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}
@@ -183,13 +179,12 @@ jobs:
           retention-days: 30
       
       - name: Upload artifact (macOS/Linux)
-        if: matrix.os != 'windows-latest' && steps.verify_executable.outputs.executable_exists == 'true'
+        if: matrix.os != 'windows-latest' && steps.verify_executable_unix.outputs.executable_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI
           retention-days: 30
-
   release:
     needs: [check-updates, build]
     # Only create releases if there are actual updates, not for testing
