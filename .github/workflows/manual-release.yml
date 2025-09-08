@@ -1,0 +1,344 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:  # Allows manual triggering from the Actions tab
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+      release_title:
+        description: 'Release title'
+        required: true
+        type: string
+      release_notes:
+        description: 'Release notes'
+        required: true
+        type: string
+      prerelease:
+        description: 'Is this a prerelease?'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install Qt dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev
+        continue-on-error: true
+        
+      - name: Install FUSE (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fuse libfuse2
+        continue-on-error: true
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt5 PyInstaller requests
+        timeout-minutes: 20
+        continue-on-error: true
+          
+      - name: Run fetch_binaries.py
+        run: python yt_dlp_gui/fetch_binaries.py
+        timeout-minutes: 20
+        continue-on-error: true
+          
+      - name: Build application
+        run: python build.py
+        timeout-minutes: 60
+        
+      - name: Sign Windows executable
+        if: matrix.os == 'windows-latest' && env.WINDOWS_CERTIFICATE_BASE64 != ''
+        run: |
+          # Decode the certificate
+          echo "$WINDOWS_CERTIFICATE_BASE64" | base64 -d > certificate.pfx
+          
+          # Sign the executable
+          signtool sign /f certificate.pfx /p "$WINDOWS_CERTIFICATE_PASSWORD" /t http://timestamp.digicert.com /fd sha256 "dist/yt-dlp GUI.exe"
+          
+          # Verify the signature
+          signtool verify /pa "dist/yt-dlp GUI.exe"
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        continue-on-error: true
+        
+      - name: Sign macOS application
+        if: matrix.os == 'macos-latest' && env.MACOS_CERTIFICATE_BASE64 != ''
+        run: |
+          # Import the certificate
+          echo "$MACOS_CERTIFICATE_BASE64" | base64 -d > certificate.p12
+          
+          # Create keychain
+          security create-keychain -p "$MACOS_CERTIFICATE_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$MACOS_CERTIFICATE_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          
+          # Import certificate
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          
+          # Set key partition list
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CERTIFICATE_PASSWORD" build.keychain
+          
+          # Sign the app bundle
+          codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" "dist/yt-dlp GUI.app"
+          
+          # Verify the signature
+          codesign --verify --verbose=4 "dist/yt-dlp GUI.app"
+          
+          # Sign the DMG
+          if [ -f "dist/yt-dlp GUI.dmg" ]; then
+            codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" "dist/yt-dlp GUI.dmg"
+            codesign --verify --verbose=4 "dist/yt-dlp GUI.dmg"
+          fi
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        continue-on-error: true
+        
+      - name: Sign Linux AppImage
+        if: matrix.os == 'ubuntu-latest' && env.GPG_PRIVATE_KEY != '' && steps.verify_appimage_linux.outputs.appimage_exists == 'true'
+        run: |
+          # Import GPG key
+          echo "$GPG_PRIVATE_KEY" | gpg --import --batch --passphrase "$GPG_PASSPHRASE"
+          
+          # Sign the AppImage
+          gpg --detach-sign --passphrase "$GPG_PASSPHRASE" --batch --yes "dist/yt-dlp GUI.AppImage"
+          
+          # Verify the signature
+          gpg --verify "dist/yt-dlp GUI.AppImage.sig" "dist/yt-dlp GUI.AppImage"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        continue-on-error: true
+        
+      - name: Check PyInstaller output (Windows)
+        if: matrix.os == 'windows-latest' && always()
+        run: |
+          echo "=== Checking build directory ==="
+          if (Test-Path "build") {
+            echo "Build directory exists:"
+            Get-ChildItem -Path "build" -Recurse | Select-Object -First 20
+          } else {
+            echo "Build directory does not exist"
+          }
+          echo ""
+          echo "=== Checking dist directory ==="
+          if (Test-Path "dist") {
+            echo "Dist directory exists:"
+            Get-ChildItem -Path "dist" | Format-Table
+            if (Get-ChildItem -Path "dist" | Where-Object { -not $_.PsIsContainer }) {
+              echo "Files in dist directory:"
+              Get-ChildItem -Path "dist" -File | ForEach-Object { 
+                echo "File: $($_.Name)"
+              }
+            } else {
+              echo "Dist directory is empty"
+            }
+          } else {
+            echo "Dist directory does not exist"
+          }
+        continue-on-error: true
+        
+      - name: Check PyInstaller output (macOS/Linux)
+        if: matrix.os != 'windows-latest' && always()
+        run: |
+          echo "=== Checking build directory ==="
+          if [ -d "build" ]; then
+            echo "Build directory exists:"
+            find build/ -type f | head -20
+          else
+            echo "Build directory does not exist"
+          fi
+          echo ""
+          echo "=== Checking dist directory ==="
+          if [ -d "dist" ]; then
+            echo "Dist directory exists:"
+            ls -la dist/
+            if [ "$(ls -A dist/)" ]; then
+              echo "Files in dist directory:"
+              find dist/ -type f -exec file {} \;
+            else
+              echo "Dist directory is empty"
+            fi
+          else
+            echo "Dist directory does not exist"
+          fi
+        continue-on-error: true
+        
+      - name: List dist directory
+        run: |
+          echo "Contents of dist directory:"
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            Get-ChildItem -Path "dist" -Recurse | Format-Table Name, Length, Mode
+          else
+            ls -la dist/
+          fi
+        continue-on-error: true
+        
+      - name: Verify executable exists (Windows)
+        id: verify_executable_windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          $exePath = "dist/yt-dlp GUI.exe"
+          
+          if (Test-Path $exePath) {
+            $fileInfo = Get-Item $exePath
+            echo "Executable found."
+            echo "executable_exists=true" >> $env:GITHUB_OUTPUT
+            echo "file_size=$($fileInfo.Length)" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "Executable not found."
+            echo "executable_exists=false" >> $env:GITHUB_OUTPUT
+          }
+        continue-on-error: true
+        
+      - name: Verify application bundle exists (macOS)
+        id: verify_app_bundle_macos
+        if: matrix.os == 'macos-latest'
+        run: |
+          if [ -d "dist/yt-dlp GUI.app" ]; then
+            echo "Application bundle found."
+            echo "app_bundle_exists=true" >> $GITHUB_OUTPUT
+            echo "app_size=$(du -sh "dist/yt-dlp GUI.app" | cut -f1)" >> $GITHUB_OUTPUT
+          else {
+            echo "Application bundle not found."
+            echo "app_bundle_exists=false" >> $GITHUB_OUTPUT
+          }
+        continue-on-error: true
+        
+      - name: Verify DMG exists (macOS)
+        id: verify_dmg_macos
+        if: matrix.os == 'macos-latest'
+        run: |
+          if [ -f "dist/yt-dlp GUI.dmg" ]; then
+            echo "DMG found."
+            echo "dmg_exists=true" >> $GITHUB_OUTPUT
+            echo "dmg_size=$(du -sh "dist/yt-dlp GUI.dmg" | cut -f1)" >> $GITHUB_OUTPUT
+          else {
+            echo "DMG not found."
+            echo "dmg_exists=false" >> $GITHUB_OUTPUT
+          }
+        continue-on-error: true
+        
+      - name: Verify application bundle exists (Linux)
+        id: verify_app_bundle_linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -d "dist/yt-dlp GUI" ]; then
+            echo "Application bundle found."
+            echo "app_bundle_exists=true" >> $GITHUB_OUTPUT
+            echo "app_size=$(du -sh "dist/yt-dlp GUI" | cut -f1)" >> $GITHUB_OUTPUT
+          else {
+            echo "Application bundle not found."
+            echo "app_bundle_exists=false" >> $GITHUB_OUTPUT
+          }
+        continue-on-error: true
+        
+      - name: Verify AppImage exists (Linux)
+        id: verify_appimage_linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -f "dist/yt-dlp GUI.AppImage" ]; then
+            echo "AppImage found."
+            echo "appimage_exists=true" >> $GITHUB_OUTPUT
+            echo "appimage_size=$(du -sh "dist/yt-dlp GUI.AppImage" | cut -f1)" >> $GITHUB_OUTPUT
+          else {
+            echo "AppImage not found."
+            echo "appimage_exists=false" >> $GITHUB_OUTPUT
+          }
+        continue-on-error: true
+        
+      - name: Verify tarball exists (Linux)
+        id: verify_tarball_linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -f "dist/yt-dlp GUI.tar.gz" ]; then
+            echo "tarball_exists=true" >> $GITHUB_OUTPUT
+            echo "tarball_size=$(du -sh "dist/yt-dlp GUI.tar.gz" | cut -f1)" >> $GITHUB_OUTPUT
+          else {
+            echo "tarball_exists=false" >> $GITHUB_OUTPUT
+          }
+        continue-on-error: true
+        
+      - name: Upload artifact (Windows)
+        if: matrix.os == 'windows-latest' && steps.verify_executable_windows.outputs.executable_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-${{ matrix.os }}
+          path: dist/yt-dlp GUI.exe
+          retention-days: 30
+          
+      - name: Upload artifact (macOS)
+        if: matrix.os == 'macos-latest' && steps.verify_dmg_macos.outputs.dmg_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-${{ matrix.os }}
+          path: dist/yt-dlp GUI.dmg
+          retention-days: 30
+          
+      - name: Upload artifact (Linux) - AppImage
+        if: matrix.os == 'ubuntu-latest' && steps.verify_appimage_linux.outputs.appimage_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-${{ matrix.os }}
+          path: |
+            dist/yt-dlp GUI.AppImage
+            dist/yt-dlp GUI.AppImage.sig
+          retention-days: 30
+          
+      - name: Upload artifact (Linux) - Tarball
+        if: matrix.os == 'ubuntu-latest' && steps.verify_tarball_linux.outputs.tarball_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-${{ matrix.os }}-tarball
+          path: dist/yt-dlp GUI.tar.gz
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: ${{ github.event.inputs.release_title }}
+          body: ${{ github.event.inputs.release_notes }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+          files: |
+            yt-dlp-gui-windows-latest/yt-dlp GUI.exe
+            yt-dlp-gui-macos-latest/yt-dlp GUI.dmg
+            yt-dlp-gui-ubuntu-latest/yt-dlp GUI.AppImage
+            yt-dlp-gui-ubuntu-latest/yt-dlp GUI.AppImage.sig
+            yt-dlp-gui-ubuntu-latest-tarball/yt-dlp GUI.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
