@@ -8,14 +8,12 @@ import re
 import shutil
 import platform
 import traceback
-import webbrowser
 from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QLineEdit, QPushButton, QComboBox, QProgressBar, 
-                            QTextEdit, QFileDialog, QStyleFactory, QMessageBox, QErrorMessage, QInputDialog)
-from PyQt5.QtCore import QThread, pyqtSignal, Qt, QSettings, QTimer
-from PyQt5.QtGui import QIcon, QPalette, QColor, QDesktopServices
-from PyQt5.QtCore import QUrl
+                            QTextEdit, QFileDialog, QStyleFactory, QMessageBox, QErrorMessage)
+from PyQt5.QtCore import QThread, pyqtSignal, Qt, QSettings
+from PyQt5.QtGui import QIcon, QPalette, QColor
 
 # Get the directory of the current script
 if getattr(sys, 'frozen', False):
@@ -73,19 +71,16 @@ class WorkerThread(QThread):
     progress = pyqtSignal(int)
     log = pyqtSignal(str)
     finished = pyqtSignal(bool, str)
-    request_auth = pyqtSignal()
 
-    def __init__(self, url, output_dir, quality, cookies_file=None):
+    def __init__(self, url, output_dir, quality):
         super().__init__()
         self.url = url
         self.output_dir = output_dir
         self.quality = quality
-        self.cookies_file = cookies_file
         self.is_cancelled = False
         self.process = None
         self.process_convert = None
         self.merged_file = None  # Track the merged file
-        self.attempt_count = 0  # Track download attempts
 
     def cancel(self):
         """Cancel the download and conversion process."""
@@ -288,218 +283,132 @@ class WorkerThread(QThread):
         
         return output_path
 
-    def try_download_method(self, method_name, cmd_options):
-        """Try a specific download method."""
-        if self.is_cancelled:
-            return False
-            
-        self.attempt_count += 1
-        self.log.emit(f"Attempt {self.attempt_count}: Trying {method_name} method...")
-        
-        # Paths to the binaries
-        yt_dlp_path = os.path.join(
-            ASSETS_DIR,
-            "yt-dlp.exe" if system == 'windows'
-            else "yt-dlp_macos" if system == 'darwin'
-            else "yt-dlp"
-        )
-        ffmpeg_path = os.path.join(ASSETS_DIR, "ffmpeg.exe" if system == 'windows' else "ffmpeg")
-
-        # Prepare the yt-dlp command
-        cmd = [
-            yt_dlp_path,
-            "--no-warnings",
-            "--ffmpeg-location", ffmpeg_path,
-            "--output", os.path.join(self.output_dir, "%(title)s.%(ext)s"),
-        ] + cmd_options
-
-        # Add format selection based on quality
-        if self.quality == "Best":
-            cmd.extend(["-f", "bestvideo+bestaudio/best"])
-        elif self.quality == "4K (2160p)":
-            cmd.extend(["-f", "bestvideo[height<=2160]+bestaudio/best[height<=2160]"])
-        elif self.quality == "2K (1440p)":
-            cmd.extend(["-f", "bestvideo[height<=1440]+bestaudio/best[height<=1440]"])
-        elif self.quality == "1080p":
-            cmd.extend(["-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]"])
-        elif self.quality == "720p":
-            cmd.extend(["-f", "bestvideo[height<=720]+bestaudio/best[height<=720]"])
-        elif self.quality == "480p":
-            cmd.extend(["-f", "bestvideo[height<=480]+bestaudio/best[height<=480]"])
-        elif self.quality == "360p":
-            cmd.extend(["-f", "bestvideo[height<=360]+bestaudio/best[height<=360]"])
-        elif self.quality == "Audio (MP3)":
-            cmd.extend(["-x", "--audio-format", "mp3"])
-        elif self.quality == "Audio (WAV)":
-            cmd.extend(["-x", "--audio-format", "wav"])
-        elif self.quality == "Audio (M4A)":
-            cmd.extend(["-x", "--audio-format", "m4a"])
-
-        # Add the URL
-        cmd.append(self.url)
-
-        self.log.emit(f"Running command: {' '.join(cmd)}")
-
-        # Run yt-dlp
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-            creationflags=CREATE_NO_WINDOW
-        )
-
-        # Parse output for progress and file information
-        for line in iter(self.process.stdout.readline, ''):
-            if self.is_cancelled:
-                self.process.terminate()
-                self.log.emit("Download cancelled.")
-                return False
-
-            self.log.emit(line.strip())
-
-            # Extract filename if downloading
-            if "[download] Destination:" in line:
-                current_file = line.split(":", 1)[1].strip()
-                self.log.emit(f"Downloading to: {current_file}")
-
-            # Extract progress percentage
-            match = re.search(r"\[download\]\s+(\d+\.\d+)%", line)
-            if match:
-                percent = float(match.group(1))
-                self.progress.emit(int(percent))
-
-            # Extract the final file path
-            if "[Merger] Merging formats into" in line:
-                self.merged_file = line.split("into", 1)[1].strip().strip('"')
-                self.log.emit(f"Merged file: {self.merged_file}")
-
-        # Wait for the process to complete
-        return_code = self.process.wait()
-        if return_code != 0 and not self.is_cancelled:
-            self.log.emit(f"{method_name} method failed with code {return_code}")
-            return False
-
-        # If we didn't find a merged file, look for any file in the output directory
-        if not self.merged_file or not os.path.exists(self.merged_file):
-            self.log.emit("No merged file found, looking for downloaded files...")
-            output_files = []
-            for file in os.listdir(self.output_dir):
-                file_path = os.path.join(self.output_dir, file)
-                if os.path.isfile(file_path):
-                    output_files.append(file_path)
-            
-            if output_files:
-                # Get the most recently modified file
-                self.merged_file = max(output_files, key=os.path.getmtime)
-                self.log.emit(f"Found file: {self.merged_file}")
-            else:
-                self.log.emit("Error: No files found in the output directory.")
-                return False
-
-        return True
-
     def run(self):
         """Run the download and conversion process."""
         try:
-            # Define different download methods to try
-            download_methods = [
-                # Method 1: With cookies if provided
-                ("Cookies", [
-                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "--cookies", self.cookies_file,
-                ]) if self.cookies_file else None,
-                
-                # Method 2: Standard with headers
-                ("Standard", [
-                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "--add-header", "Accept: */*",
-                    "--add-header", "Accept-Language: en-US,en;q=0.5",
-                    "--add-header", "Accept-Encoding: gzip, deflate",
-                    "--add-header", "Connection: keep-alive",
-                    "--add-header", "Upgrade-Insecure-Requests: 1",
-                    "--extractor-args", "youtube:player_client=web",
-                    "--extractor-args", "youtube:player_params=playback_context=1",
-                    "--extractor-args", "youtube:age_gate=false",
-                ]),
-                
-                # Method 3: Android client
-                ("Android", [
-                    "--user-agent", "com.google.android.youtube/19.29.37 (Linux; U; Android 12; GB) gzip",
-                    "--extractor-args", "youtube:player_client=android",
-                    "--extractor-args", "youtube:player_params=playback_context=1",
-                ]),
-                
-                # Method 4: iOS client
-                ("iOS", [
-                    "--user-agent", "com.google.ios.youtube/19.29.37 (iPhone14,3; U; CPU iOS 16_6 like Mac OS X)",
-                    "--extractor-args", "youtube:player_client=ios",
-                    "--extractor-args", "youtube:player_params=playback_context=1",
-                ]),
-                
-                # Method 5: TV client
-                ("TV", [
-                    "--user-agent", "Mozilla/5.0 (ChromiumStyle/114.0.0.0) TV Safari/537.36",
-                    "--extractor-args", "youtube:player_client=tv_embedded",
-                    "--extractor-args", "youtube:player_params=playback_context=1",
-                ]),
-                
-                # Method 6: MWeb client
-                ("MWeb", [
-                    "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-                    "--extractor-args", "youtube:player_client=mweb",
-                    "--extractor-args", "youtube:player_params=playback_context=1",
-                ]),
-                
-                # Method 7: Create embed URL
-                ("Embed", [
-                    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "--format", "best",  # Simpler format for embed
-                ]),
-            ]
-            
-            # Remove None methods
-            download_methods = [m for m in download_methods if m is not None]
+            # Paths to the binaries
+            yt_dlp_path = os.path.join(
+                ASSETS_DIR,
+                "yt-dlp.exe" if system == 'windows'
+                else "yt-dlp_macos" if system == 'darwin'
+                else "yt-dlp"
+            )
+            ffmpeg_path = os.path.join(ASSETS_DIR, "ffmpeg.exe" if system == 'windows' else "ffmpeg")
+            ffprobe_path = os.path.join(ASSETS_DIR, "ffprobe.exe" if system == 'windows' else "ffprobe")
 
-            # Try each method until one succeeds
-            success = False
-            for method_name, cmd_options in download_methods:
-                if self.is_cancelled:
-                    break
-                    
-                # For embed method, modify the URL
-                if method_name == "Embed":
-                    # Convert regular URL to embed URL
-                    embed_url = self.url.replace("youtu.be/", "www.youtube.com/embed/")
-                    embed_url = embed_url.replace("www.youtube.com/watch?v=", "www.youtube.com/embed/")
-                    
-                    # Save original URL and use embed URL
-                    original_url = self.url
-                    self.url = embed_url
-                    
-                    if self.try_download_method(method_name, cmd_options):
-                        success = True
-                        # Restore original URL
-                        self.url = original_url
-                        break
-                    
-                    # Restore original URL
-                    self.url = original_url
-                    continue
-                
-                # Try the method
-                if self.try_download_method(method_name, cmd_options):
-                    success = True
-                    break
-
-            if not success:
-                self.log.emit("All download methods failed.")
-                self.log.emit("Authentication is required. Please authenticate via browser.")
-                # Signal that authentication is needed
-                self.request_auth.emit()
+            # Check if the binaries exist
+            if not os.path.exists(yt_dlp_path):
+                self.log.emit(f"Error: {yt_dlp_path} not found.")
+                self.finished.emit(False, "yt-dlp not found.")
                 return
+
+            if not os.path.exists(ffmpeg_path):
+                self.log.emit(f"Error: {ffmpeg_path} not found.")
+                self.finished.emit(False, "ffmpeg not found.")
+                return
+
+            if not os.path.exists(ffprobe_path):
+                self.log.emit(f"Error: {ffprobe_path} not found.")
+                self.finished.emit(False, "ffprobe not found.")
+                return
+
+            # Prepare the yt-dlp command
+            cmd = [
+                yt_dlp_path,
+                "--no-warnings",
+                "--ffmpeg-location", ffmpeg_path,
+                "--output", os.path.join(self.output_dir, "%(title)s.%(ext)s"),
+                # No --keep-video flag, so yt-dlp will clean up after merging
+            ]
+
+            # Add format selection based on quality
+            if self.quality == "Best":
+                cmd.extend(["-f", "bestvideo+bestaudio/best"])
+            elif self.quality == "4K (2160p)":
+                cmd.extend(["-f", "bestvideo[height<=2160]+bestaudio/best[height<=2160]"])
+            elif self.quality == "2K (1440p)":
+                cmd.extend(["-f", "bestvideo[height<=1440]+bestaudio/best[height<=1440]"])
+            elif self.quality == "1080p":
+                cmd.extend(["-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]"])
+            elif self.quality == "720p":
+                cmd.extend(["-f", "bestvideo[height<=720]+bestaudio/best[height<=720]"])
+            elif self.quality == "480p":
+                cmd.extend(["-f", "bestvideo[height<=480]+bestaudio/best[height<=480]"])
+            elif self.quality == "360p":
+                cmd.extend(["-f", "bestvideo[height<=360]+bestaudio/best[height<=360]"])
+            elif self.quality == "Audio (MP3)":
+                cmd.extend(["-x", "--audio-format", "mp3"])
+            elif self.quality == "Audio (WAV)":
+                cmd.extend(["-x", "--audio-format", "wav"])
+            elif self.quality == "Audio (M4A)":
+                cmd.extend(["-x", "--audio-format", "m4a"])
+
+            # Add the URL
+            cmd.append(self.url)
+
+            self.log.emit(f"Running command: {' '.join(cmd)}")
+
+            # Run yt-dlp
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+                creationflags=CREATE_NO_WINDOW
+            )
+
+            # Parse output for progress and file information
+            for line in iter(self.process.stdout.readline, ''):
+                if self.is_cancelled:
+                    self.process.terminate()
+                    self.log.emit("Download cancelled.")
+                    self.finished.emit(False, "Download cancelled.")
+                    return
+
+                self.log.emit(line.strip())
+
+                # Extract filename if downloading
+                if "[download] Destination:" in line:
+                    current_file = line.split(":", 1)[1].strip()
+                    self.log.emit(f"Downloading to: {current_file}")
+
+                # Extract progress percentage
+                match = re.search(r"\[download\]\s+(\d+\.\d+)%", line)
+                if match:
+                    percent = float(match.group(1))
+                    self.progress.emit(int(percent))
+
+                # Extract the final file path
+                if "[Merger] Merging formats into" in line:
+                    self.merged_file = line.split("into", 1)[1].strip().strip('"')
+                    self.log.emit(f"Merged file: {self.merged_file}")
+
+            # Wait for the process to complete
+            return_code = self.process.wait()
+            if return_code != 0 and not self.is_cancelled:
+                self.log.emit(f"yt-dlp exited with code {return_code}")
+                self.finished.emit(False, f"yt-dlp exited with code {return_code}")
+                return
+
+            # If we didn't find a merged file, look for any file in the output directory
+            if not self.merged_file or not os.path.exists(self.merged_file):
+                self.log.emit("No merged file found, looking for downloaded files...")
+                output_files = []
+                for file in os.listdir(self.output_dir):
+                    file_path = os.path.join(self.output_dir, file)
+                    if os.path.isfile(file_path):
+                        output_files.append(file_path)
+                
+                if output_files:
+                    # Get the most recently modified file
+                    self.merged_file = max(output_files, key=os.path.getmtime)
+                    self.log.emit(f"Found file: {self.merged_file}")
+                else:
+                    self.log.emit("Error: No files found in the output directory.")
+                    self.finished.emit(False, "No files found in the output directory.")
+                    return
 
             # Process the merged file
             if self.merged_file and os.path.exists(self.merged_file):
@@ -549,7 +458,6 @@ class MainWindow(QMainWindow):
         
         # Initialize worker thread
         self.worker = None
-        self.cookies_file = None
 
     def load_config(self):
         """Load configuration from file."""
@@ -615,15 +523,6 @@ class MainWindow(QMainWindow):
         quality_layout.addWidget(self.quality_combo)
         layout.addLayout(quality_layout)
         
-        # Authentication section
-        auth_layout = QHBoxLayout()
-        self.auth_button = QPushButton("Authenticate with Browser")
-        self.auth_button.clicked.connect(self.authenticate_browser)
-        self.auth_status = QLabel("Not authenticated")
-        auth_layout.addWidget(self.auth_button)
-        auth_layout.addWidget(self.auth_status)
-        layout.addLayout(auth_layout)
-        
         # Progress bar
         self.progress_bar = QProgressBar()
         layout.addWidget(self.progress_bar)
@@ -646,11 +545,6 @@ class MainWindow(QMainWindow):
         buttons_layout.addWidget(self.cancel_button)
         buttons_layout.addWidget(self.theme_button)
         layout.addLayout(buttons_layout)
-        
-        # Add help button
-        help_button = QPushButton("Help with Bot Detection")
-        help_button.clicked.connect(self.show_help)
-        layout.addWidget(help_button)
 
     def browse_folder(self):
         """Browse for a download folder."""
@@ -727,166 +621,6 @@ class MainWindow(QMainWindow):
             self.setPalette(self.style().standardPalette())
             self.setStyleSheet("")  # Clear all styles
 
-    def authenticate_browser(self):
-        """Authenticate with browser to get cookies."""
-        self.log("Starting browser authentication process...")
-        
-        # Instructions dialog
-        instructions = QMessageBox()
-        instructions.setWindowTitle("Browser Authentication")
-        instructions.setText("Browser Authentication Required")
-        instructions.setInformativeText(
-            "YouTube is requiring authentication to download this video. "
-            "Please follow these steps:\n\n"
-            "1. Click OK to open YouTube in your browser\n"
-            "2. Sign in to your YouTube account\n"
-            "3. Play the video for a few seconds\n"
-            "4. Return to this application and click 'I'm authenticated'\n\n"
-            "Note: Make sure to stay signed in to YouTube in your browser."
-        )
-        instructions.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        
-        if instructions.exec_() != QMessageBox.Ok:
-            return
-        
-        # Open YouTube in browser
-        video_id = self.url.split("/")[-1].split("?")[0]
-        youtube_url = f"https://www.youtube.com/watch?v={video_id}"
-        webbrowser.open(youtube_url)
-        
-        # Update UI to show authentication in progress
-        self.auth_button.setText("I'm authenticated")
-        self.auth_button.clicked.disconnect(self.authenticate_browser)
-        self.auth_button.clicked.connect(self.im_authenticated)
-        self.auth_status.setText("Please authenticate in browser and click 'I'm authenticated'")
-
-    def im_authenticated(self):
-        """Called when user confirms they are authenticated."""
-        self.log("User confirmed authentication. Extracting cookies...")
-        
-        # Ask user which browser to extract cookies from
-        browsers = ["Chrome", "Firefox", "Edge", "Brave", "Opera", "Safari"]
-        browser, ok = QInputDialog.getItem(
-            self, "Select Browser", 
-            "Which browser did you use to authenticate?", 
-            browsers, 0, False
-        )
-        
-        if not ok or not browser:
-            self.log("Browser selection cancelled.")
-            return
-        
-        # Create a temporary file to store cookies
-        import tempfile
-        self.cookies_file = os.path.join(tempfile.gettempdir(), "yt_dlp_cookies.txt")
-        
-        # Try to extract cookies using browser-cookie-exporter if available
-        try:
-            self.log(f"Extracting cookies from {browser}...")
-            
-            # Try using yt-dlp's cookie extraction
-            yt_dlp_path = os.path.join(
-                ASSETS_DIR,
-                "yt-dlp.exe" if system == 'windows'
-                else "yt-dlp_macos" if system == 'darwin'
-                else "yt-dlp"
-            )
-            
-            cmd = [
-                yt_dlp_path,
-                "--cookies-from-browser", browser.lower(),
-                "--print-cookies",
-                self.url
-            ]
-            
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, 
-                creationflags=CREATE_NO_WINDOW
-            )
-            
-            if result.returncode == 0:
-                # Save cookies to file
-                with open(self.cookies_file, 'w') as f:
-                    f.write(result.stdout)
-                
-                self.log(f"Successfully extracted cookies from {browser}")
-                self.auth_status.setText(f"Authenticated with {browser}")
-                self.auth_button.setText("Re-authenticate")
-                self.auth_button.clicked.disconnect(self.im_authenticated)
-                self.auth_button.clicked.connect(self.authenticate_browser)
-                return
-            else:
-                self.log(f"Failed to extract cookies: {result.stderr}")
-        except Exception as e:
-            self.log(f"Error extracting cookies: {e}")
-        
-        # If automatic extraction failed, provide manual instructions
-        self.log("Automatic cookie extraction failed. Please try manual method.")
-        
-        manual_instructions = QMessageBox()
-        manual_instructions.setWindowTitle("Manual Cookie Extraction")
-        manual_instructions.setText("Manual Cookie Extraction Required")
-        manual_instructions.setInformativeText(
-            f"Automatic cookie extraction from {browser} failed. "
-            "Please follow these manual steps:\n\n"
-            "1. Install a browser extension like 'Get cookies.txt' or 'Export cookies.txt'\n"
-            "2. Export cookies from YouTube while logged in\n"
-            "3. Save the cookies file to your computer\n"
-            "4. Click 'Select Cookies File' and select the saved file"
-        )
-        manual_instructions.setStandardButtons(QMessageBox.Ok)
-        manual_instructions.exec_()
-        
-        # Let user select cookies file manually
-        cookies_file, _ = QFileDialog.getOpenFileName(
-            self, "Select Cookies File", "", "Cookie Files (*.txt)"
-        )
-        
-        if cookies_file and os.path.exists(cookies_file):
-            self.cookies_file = cookies_file
-            self.auth_status.setText(f"Using manual cookies file")
-            self.auth_button.setText("Re-authenticate")
-            self.auth_button.clicked.disconnect(self.im_authenticated)
-            self.auth_button.clicked.connect(self.authenticate_browser)
-            self.log(f"Using manual cookies file: {cookies_file}")
-        else:
-            self.auth_status.setText("Not authenticated")
-            self.auth_button.setText("Authenticate with Browser")
-            self.auth_button.clicked.disconnect(self.im_authenticated)
-            self.auth_button.clicked.connect(self.authenticate_browser)
-            self.log("No cookies file selected.")
-
-    def show_help(self):
-        """Show help dialog for bot detection issues."""
-        help_text = """
-        <h2>Help with YouTube Bot Detection</h2>
-        <p>If you're encountering "Sign in to confirm you're not a bot" errors, try these solutions:</p>
-        
-        <h3>1. Browser Authentication (Recommended)</h3>
-        <p>Click the "Authenticate with Browser" button and follow the instructions to authenticate with YouTube.</p>
-        
-        <h3>2. Update yt-dlp</h3>
-        <p>The latest version of yt-dlp often includes fixes for YouTube bot detection.</p>
-        
-        <h3>3. Try Different Video Quality</h3>
-        <p>Sometimes lower quality videos are less likely to trigger bot detection.</p>
-        
-        <h3>4. Try Different URLs</h3>
-        <p>Some videos may have stricter bot detection than others.</p>
-        
-        <h3>5. Wait and Try Again</h3>
-        <p>Sometimes the issue is temporary and will resolve itself after some time.</p>
-        
-        <h3>6. Use a VPN</h3>
-        <p>Sometimes using a VPN with a different IP address can help bypass bot detection.</p>
-        """
-        
-        msg_box = QMessageBox()
-        msg_box.setWindowTitle("Help with Bot Detection")
-        msg_box.setTextFormat(Qt.RichText)
-        msg_box.setText(help_text)
-        msg_box.exec_()
-
     def start_download(self):
         """Start the download and conversion process."""
         url = self.url_input.text().strip()
@@ -900,7 +634,6 @@ class MainWindow(QMainWindow):
         self.url_input.setEnabled(False)
         self.folder_button.setEnabled(False)
         self.quality_combo.setEnabled(False)
-        self.auth_button.setEnabled(False)
         self.download_button.setEnabled(False)
         self.cancel_button.setEnabled(True)  # Enable cancel button
         
@@ -908,29 +641,11 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         
         # Create and start the worker thread
-        self.worker = WorkerThread(url, self.download_dir, quality, self.cookies_file)
+        self.worker = WorkerThread(url, self.download_dir, quality)
         self.worker.progress.connect(self.update_progress)
         self.worker.log.connect(self.log)
         self.worker.finished.connect(self.download_finished)
-        self.worker.request_auth.connect(self.on_request_auth)
         self.worker.start()
-
-    def on_request_auth(self):
-        """Called when worker requests authentication."""
-        # Enable UI elements for authentication
-        self.url_input.setEnabled(True)
-        self.folder_button.setEnabled(True)
-        self.quality_combo.setEnabled(True)
-        self.auth_button.setEnabled(True)
-        self.download_button.setEnabled(True)
-        self.cancel_button.setEnabled(False)
-        
-        # Show message
-        self.log("Authentication required. Please authenticate with your browser.")
-        
-        # Scroll to authentication section
-        scrollbar = self.log_output.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
 
     def cancel_download(self):
         """Cancel the download and conversion process."""
@@ -958,7 +673,6 @@ class MainWindow(QMainWindow):
         self.url_input.setEnabled(True)
         self.folder_button.setEnabled(True)
         self.quality_combo.setEnabled(True)
-        self.auth_button.setEnabled(True)
         self.download_button.setEnabled(True)
         self.cancel_button.setEnabled(False)  # Disable cancel button
         
