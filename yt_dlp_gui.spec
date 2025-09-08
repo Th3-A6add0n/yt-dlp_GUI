@@ -48,18 +48,23 @@ if not os.path.exists(icon_path):
 
 block_cipher = None
 
+# Prepare the datas list - start with the binaries which should always exist
+datas = [
+    # Include the binaries in the correct folder structure
+    (os.path.join(assets_dir, yt_dlp_name), os.path.join('assets', platform_folder)),
+    (os.path.join(assets_dir, ffmpeg_name), os.path.join('assets', platform_folder)),
+    (os.path.join(assets_dir, ffprobe_name), os.path.join('assets', platform_folder)),
+]
+
+# Add the icon file to the datas list if it exists
+if icon_path:
+    datas.append((icon_path, 'assets'))
+
 a = Analysis(
     ['yt_dlp_gui/main.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        # Include the binaries in the correct folder structure
-        (os.path.join(assets_dir, yt_dlp_name), os.path.join('assets', platform_folder)),
-        (os.path.join(assets_dir, ffmpeg_name), os.path.join('assets', platform_folder)),
-        (os.path.join(assets_dir, ffprobe_name), os.path.join('assets', platform_folder)),
-        # Include the icon file in the assets directory
-        (icon_path, os.path.join('assets')) if icon_path else (),
-    ],
+    datas=datas,  # Use the prepared datas list
     hiddenimports=['sip', 'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets'],
     hookspath=[],
     hooksconfig={},
