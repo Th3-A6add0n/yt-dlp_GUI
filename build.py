@@ -323,6 +323,23 @@ Categories=AudioVideo;Video;Network;
     print(f"Successfully created Linux application bundle at {app_dir}")
     return True
 
+def create_linux_tarball(dist_dir, app_name):
+    """Create a tarball of the Linux application bundle."""
+    print("Creating Linux tarball...")
+    
+    app_dir = dist_dir / f"{app_name}"
+    tarball_path = dist_dir / f"{app_name}.tar.gz"
+    
+    try:
+        with tarfile.open(tarball_path, "w:gz") as tar:
+            tar.add(app_dir, arcname=app_name)
+        
+        print(f"Successfully created tarball at {tarball_path}")
+        return True
+    except Exception as e:
+        print(f"Error creating tarball: {e}")
+        return False
+
 def create_linux_appimage(dist_dir, app_name):
     """Create an AppImage for the Linux application."""
     print("Creating Linux AppImage...")
@@ -546,6 +563,9 @@ def build_application():
         if not create_linux_app_bundle(dist_dir, app_name):
             print("Failed to create Linux application bundle")
             return False
+        
+        # Create a tarball of the application bundle as a fallback
+        create_linux_tarball(dist_dir, app_name)
         
         # Try to create AppImage, but don't fail the entire build if it fails
         if not create_linux_appimage(dist_dir, app_name):

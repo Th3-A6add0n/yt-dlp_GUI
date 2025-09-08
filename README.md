@@ -34,18 +34,49 @@ You can download the latest release of yt-dlp GUI from the [Releases page](https
 5. Run the application from your Applications folder.
 
 #### Linux
+
+##### Option 1: AppImage (Recommended)
 1. Download the latest `yt-dlp GUI.AppImage` from the releases page.
 2. Open a terminal and navigate to the directory where you downloaded the file.
 3. Make the file executable:
    ```bash
    chmod +x yt-dlp\ GUI.AppImage
    ```
-4. Run the application:
+4. Install FUSE if you haven't already:
+   ```bash
+   # For Ubuntu/Debian
+   sudo apt install fuse libfuse2
+   
+   # For Fedora
+   sudo dnf install fuse
+   
+   # For Arch Linux
+   sudo pacman -S fuse2
+   ```
+5. Run the application:
    ```bash
    ./yt-dlp\ GUI.AppImage
    ```
    
-   Alternatively, you can double-click the file in most file managers.
+##### Option 2: Tarball (No FUSE required)
+If you cannot install FUSE or prefer not to use AppImage, you can use the tarball:
+
+1. Download the latest `yt-dlp GUI.tar.gz` from the releases page.
+2. Open a terminal and navigate to the directory where you downloaded the file.
+3. Extract the tarball:
+   ```bash
+   tar -xzf yt-dlp\ GUI.tar.gz
+   ```
+4. Navigate to the extracted directory:
+   ```bash
+   cd yt-dlp\ GUI
+   ```
+5. Run the application:
+   ```bash
+   ./run_yt-dlp\ GUI.sh
+   ```
+   
+   Alternatively, you can double-click the `run_yt-dlp GUI.sh` file in your file manager.
 
 ### Usage
 

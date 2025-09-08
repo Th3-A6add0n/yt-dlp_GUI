@@ -104,7 +104,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-cursor0 libxcb-cursor0-dev
+          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev
         continue-on-error: true
       - name: Install FUSE (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -303,6 +303,20 @@ jobs:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI.dmg
           retention-days: 30
+      - name: Verify tarball exists (Linux)
+        id: verify_tarball_linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if [ -f "dist/yt-dlp GUI.tar.gz" ]; then
+            echo "tarball_exists=true" >> $GITHUB_OUTPUT
+            echo "tarball_size=$(du -sh "dist/yt-dlp GUI.tar.gz" | cut -f1)" >> $GITHUB_OUTPUT
+          else
+            echo "tarball_exists=false" >> $GITHUB_OUTPUT
+            echo "Contents of dist directory:"
+            ls -la dist/
+          fi
+        continue-on-error: true
+
       - name: Upload artifact (Linux) - AppImage
         if: matrix.os == 'ubuntu-latest' && steps.verify_appimage_linux.outputs.appimage_exists == 'true'
         uses: actions/upload-artifact@v4
@@ -312,7 +326,7 @@ jobs:
           retention-days: 30
 
       - name: Upload artifact (Linux) - Tarball
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && steps.verify_tarball_linux.outputs.tarball_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yt-dlp-gui-${{ matrix.os }}-tarball
