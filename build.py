@@ -309,6 +309,8 @@ Categories=AudioVideo;Video;Network;
         f.write(f'# Set Qt plugin path\n')
         f.write(f'export QT_PLUGIN_PATH="$APP_DIR/plugins"\n')
         f.write(f'export QT_QPA_PLATFORM_PLUGIN_PATH="$APP_DIR/plugins/platforms"\n\n')
+        f.write(f'# Set XDG_DATA_DIRS to include the app directory\n')
+        f.write(f'export XDG_DATA_DIRS="$APP_DIR:$XDG_DATA_DIRS"\n\n')
         f.write(f'# Run the application\n')
         f.write(f'exec "$APP_DIR/bin/{app_name}" "$@"\n')
     
@@ -395,8 +397,16 @@ def create_linux_appimage(dist_dir, app_name):
                 # Also copy to the standard icon directory
                 shutil.copy(str(icon_file), str(appdir_usr_share_icons_hicolor_256x256_apps / f"{app_name}.png"))
                 print(f"Copied icon to {appdir_usr_share_icons_hicolor_256x256_apps / f'{app_name}.png'}")
+            
+            # Copy Qt plugins
+            app_plugins = app_dir / "plugins"
+            if app_plugins.exists():
+                plugins_dest = appdir_usr_lib / "plugins"
+                plugins_dest.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(str(app_plugins), str(plugins_dest), dirs_exist_ok=True)
+                print(f"Copied Qt plugins to {plugins_dest}")
         
-        # Create the AppRun script
+        # Create the AppRun script with proper environment setup
         apprun_path = appdir_path / "AppRun"
         with open(apprun_path, 'w') as f:
             f.write('#!/bin/bash\n')
@@ -407,6 +417,10 @@ def create_linux_appimage(dist_dir, app_name):
             f.write('# Set Qt plugin path\n')
             f.write('export QT_PLUGIN_PATH="$APPDIR/usr/lib/plugins"\n')
             f.write('export QT_QPA_PLATFORM_PLUGIN_PATH="$APPDIR/usr/lib/plugins/platforms"\n\n')
+            f.write('# Set XDG_DATA_DIRS to include the AppDir\n')
+            f.write('export XDG_DATA_DIRS="$APPDIR/usr/share:$XDG_DATA_DIRS"\n\n')
+            f.write('# Set Qt platform to xcb explicitly\n')
+            f.write('export QT_QPA_PLATFORM=xcb\n\n')
             f.write('# Run the application\n')
             f.write('exec "$APPDIR/usr/bin/{}" "$@"\n'.format(app_name))
         

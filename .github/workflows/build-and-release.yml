@@ -104,7 +104,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev
+          sudo apt-get install -y libxcb-xinerama0 libxcb-xinerama0-dev libxcb-icccm4 libxcb-icccm4-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-cursor0 libxcb-cursor0-dev
         continue-on-error: true
       - name: Install FUSE (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -310,10 +310,11 @@ jobs:
           name: yt-dlp-gui-${{ matrix.os }}
           path: dist/yt-dlp GUI.AppImage
           retention-days: 30
-      - name: Upload artifact (Linux) - App Bundle (Fallback)
-        if: matrix.os == 'ubuntu-latest' && steps.verify_appimage_linux.outputs.appimage_exists != 'true' && steps.verify_app_bundle_linux.outputs.app_bundle_exists == 'true'
+
+      - name: Upload artifact (Linux) - Tarball
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: yt-dlp-gui-${{ matrix.os }}
-          path: dist/yt-dlp GUI
+          name: yt-dlp-gui-${{ matrix.os }}-tarball
+          path: dist/yt-dlp GUI.tar.gz
           retention-days: 30
