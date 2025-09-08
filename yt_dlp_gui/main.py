@@ -385,6 +385,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("yt-dlp GUI")
         self.setMinimumSize(600, 400)
         
+        # Set window icon - use the assets directory in the packaged application
+        icon_path = os.path.join(APPLICATION_PATH, "assets", "icon.ico" if system == 'windows' else "icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        
         # Load configuration
         self.config = self.load_config()
         
@@ -648,12 +653,20 @@ def main():
         
         app = QApplication(sys.argv)
         
-        # Set application icon
-        icon_path = os.path.join(ASSETS_DIR, "icon.png" if system != 'windows' else "icon.ico")
+        # Set application icon - use the assets directory in the packaged application
+        icon_path = os.path.join(APPLICATION_PATH, "assets", "icon.ico" if system == 'windows' else "icon.png")
         if os.path.exists(icon_path):
             app.setWindowIcon(QIcon(icon_path))
+            print(f"Loaded icon from: {icon_path}")
+        else:
+            print(f"Warning: Icon not found at: {icon_path}")
         
         window = MainWindow()
+        
+        # Also set the window icon explicitly
+        if os.path.exists(icon_path):
+            window.setWindowIcon(QIcon(icon_path))
+        
         window.show()
         
         return app.exec_()

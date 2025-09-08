@@ -39,26 +39,10 @@ else:
     icon_extension = '.png'
 
 # Define the icon path from the root assets folder
-# For macOS, we need to check if icon.icns exists, if not, we'll use icon.png and convert it
-if system == 'darwin':
-    icon_icns_path = os.path.join(root_assets_dir, 'icon.icns')
-    icon_png_path = os.path.join(root_assets_dir, 'icon.png')
-    
-    if os.path.exists(icon_icns_path):
-        icon_path = icon_icns_path
-    elif os.path.exists(icon_png_path):
-        # We'll convert the PNG to ICNS during the build process
-        icon_path = icon_png_path
-        print(f"Note: Using icon.png, will convert to ICNS during build")
-    else:
-        print(f"Warning: No icon file found in {root_assets_dir}")
-        icon_path = None
-else:
-    # For Windows and Linux, use the appropriate icon extension
-    icon_path = os.path.join(root_assets_dir, f'icon{icon_extension}')
+icon_path = os.path.join(root_assets_dir, f'icon{icon_extension}')
 
 # Check if icon file exists
-if icon_path and not os.path.exists(icon_path):
+if not os.path.exists(icon_path):
     print(f"Warning: Icon file {icon_path} not found. Building without icon.")
     icon_path = None
 
@@ -73,6 +57,8 @@ a = Analysis(
         (os.path.join(assets_dir, yt_dlp_name), os.path.join('assets', platform_folder)),
         (os.path.join(assets_dir, ffmpeg_name), os.path.join('assets', platform_folder)),
         (os.path.join(assets_dir, ffprobe_name), os.path.join('assets', platform_folder)),
+        # Include the icon file in the assets directory
+        (icon_path, os.path.join('assets')) if icon_path else (),
     ],
     hiddenimports=['sip', 'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets'],
     hookspath=[],
@@ -134,13 +120,13 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # Changed back to False for release build
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=icon_path,  # This will be None if icon doesn't exist
+    icon=icon_path if icon_path else None,
 )
 
 # For macOS, if we used a PNG icon, we need to convert it to ICNS
